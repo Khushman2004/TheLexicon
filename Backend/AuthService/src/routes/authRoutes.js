@@ -4,11 +4,12 @@ import {
   validateLogin,
   validateRegistration,
 } from "../controllers/authController.js";
+import { ENDPOINTS } from "../config/endpoints.js";
 
 export function createAuthRoutes(authService) {
   const router = Router();
 
-  router.post("/register", async (request, response) => {
+  router.post(ENDPOINTS.AUTH.REGISTER, async (request, response) => {
     const result = await authService.register(validateRegistration(request.body));
     if (result.error) {
       response.status(result.status).json({ error: result.error });
@@ -18,7 +19,7 @@ export function createAuthRoutes(authService) {
     response.status(201).json({ user: result.user, token: result.token });
   });
 
-  router.post("/login", async (request, response) => {
+  router.post(ENDPOINTS.AUTH.LOGIN, async (request, response) => {
     const result = await authService.login(validateLogin(request.body));
     if (result.error) {
       response.status(result.status).json({ error: result.error });
@@ -28,13 +29,13 @@ export function createAuthRoutes(authService) {
     response.json({ user: result.user, token: result.token });
   });
 
-  router.get("/me", async (request, response) => {
+  router.get(ENDPOINTS.AUTH.ME, async (request, response) => {
     const user = await authService.getUserForToken(readBearerToken(request));
     if (!user) throw new HttpError(401, "A valid bearer token is required.");
     response.json({ user });
   });
 
-  router.post("/logout", (request, response) => {
+  router.post(ENDPOINTS.AUTH.LOGOUT, (request, response) => {
     if (!authService.logout(readBearerToken(request))) {
       throw new HttpError(401, "A valid bearer token is required.");
     }

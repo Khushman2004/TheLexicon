@@ -1,4 +1,5 @@
 import express from "express";
+import { ENDPOINTS } from "./config/endpoints.js";
 import { createAuthRoutes } from "./routes/authRoutes.js";
 import { HttpError } from "./controllers/authController.js";
 
@@ -7,11 +8,11 @@ export function createApp(authService) {
 
   app.use(express.json({ limit: "10kb" }));
 
-  app.get("/health", (_request, response) => {
+  app.get(ENDPOINTS.HEALTH, (_request, response) => {
     response.json({ service: "auth", status: "ok" });
   });
 
-  app.use("/api/auth", createAuthRoutes(authService));
+  app.use(ENDPOINTS.AUTH.BASE, createAuthRoutes(authService));
 
   app.use((_request, _response, next) => {
     next(new HttpError(404, "Endpoint not found."));

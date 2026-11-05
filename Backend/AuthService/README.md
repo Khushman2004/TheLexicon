@@ -17,6 +17,8 @@ The service listens on `http://localhost:5000` by default. Set `PORT` to use a d
 
 ## Endpoints
 
+Endpoint paths are centralized in `src/config/endpoints.js`; edit the `ENDPOINTS` values there to change the health, auth base, or individual auth route paths.
+
 | Method | Path | Purpose |
 | --- | --- | --- |
 | GET | `/health` | Check whether the service is running |
