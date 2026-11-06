@@ -5,6 +5,7 @@ import {
   validateRegistration,
 } from "../controllers/authController.js";
 import { ENDPOINTS } from "../config/endpoints.js";
+import { getAuthenticatedUser } from "../utils/authentication.js";
 
 export function createAuthRoutes(authService) {
   const router = Router();
@@ -30,13 +31,12 @@ export function createAuthRoutes(authService) {
   });
 
   router.get(ENDPOINTS.AUTH.ME, async (request, response) => {
-    const user = await authService.getUserForToken(readBearerToken(request));
-    if (!user) throw new HttpError(401, "A valid bearer token is required.");
+    const user = await getAuthenticatedUser(request, authService);
     response.json({ user });
   });
 
-  router.post(ENDPOINTS.AUTH.LOGOUT, (request, response) => {
-    if (!authService.logout(readBearerToken(request))) {
+  router.post(ENDPOINTS.AUTH.LOGOUT, async (request, response) => {
+    if (!(await authService.logout(readBearerToken(request)))) {
       throw new HttpError(401, "A valid bearer token is required.");
     }
 
