@@ -1,8 +1,25 @@
 import { HttpError } from "../utils/httpError.js";
+import { ENTRY_TYPES, READING_SECTION_TYPES, READING_SPACE_TYPES } from "../config/entryTypes.js";
 
-const BOOK_CHILD_TYPES = new Set(["WORD", "PHRASE", "IDIOM"]);
-const COLLECTION_CHILD_TYPES = new Set(["WORD", "PHRASE", "IDIOM", "BOOK", "ARTICLE"]);
-
+const COLLECTION_CHILD_TYPES = new Set([
+  ENTRY_TYPES.WORD,
+  ENTRY_TYPES.PHRASE,
+  ENTRY_TYPES.IDIOM,
+  ENTRY_TYPES.BOOK,
+  ENTRY_TYPES.PAPER,
+  ENTRY_TYPES.ARTICLE,
+  ENTRY_TYPES.POEM,
+  ENTRY_TYPES.POETIC_DEVICE,
+  ENTRY_TYPES.PLAY,
+  ENTRY_TYPES.CUSTOM_MODEL,
+  ENTRY_TYPES.THEORY,
+  ENTRY_TYPES.RESEARCH,
+]);
+const SECTION_CHILD_TYPES = new Map([
+  [ENTRY_TYPES.WORDS_SECTION, new Set([ENTRY_TYPES.WORD])],
+  [ENTRY_TYPES.PHRASES_SECTION, new Set([ENTRY_TYPES.PHRASE, ENTRY_TYPES.IDIOM])],
+  [ENTRY_TYPES.THEORIES_SECTION, new Set([ENTRY_TYPES.THEORY])],
+]);
 export class LibraryService {
   constructor(libraryRepository) {
     this.libraryRepository = libraryRepository;
@@ -55,6 +72,46 @@ export class LibraryService {
     return this.libraryRepository.listAllEntries(userId, id, parentId);
   }
 
+  async listReadingSpaces(userId, libraryId) {
+    const id = readId(libraryId, "libraryId");
+    await this.getLibrary(userId, id);
+    return this.libraryRepository.listReadingSpaces(userId, id);
+  }
+
+  async createReadingSpace(userId, libraryId, body) {
+    const id = readId(libraryId, "libraryId");
+    await this.getLibrary(userId, id);
+    const readingSpaceType = body?.readingSpaceType;
+    if (!READING_SPACE_TYPES.includes(readingSpaceType)) {
+      throw new HttpError(400, "readingSpaceType must be BOOK, PAPER, or ARTICLE.");
+    }
+
+    const entry = readEntry(body, readingSpaceType);
+    if (entry.parentEntryId !== null) {
+      throw new HttpError(400, "Reading spaces must be created at the library root.");
+    }
+
+    const created = await this.libraryRepository.createEntry(userId, id, entry);
+    if (!created) throw new HttpError(404, "Library not found.");
+    const sections = await this.listReadingSpaceSections(userId, id, created.id);
+    return { readingSpace: created, sections };
+  }
+
+  async listReadingSpaceSections(userId, libraryId, readingSpaceId) {
+    const id = readId(libraryId, "libraryId");
+    const spaceId = readId(readingSpaceId, "readingSpaceId");
+    await this.getLibrary(userId, id);
+    const readingSpace = await this.libraryRepository.findAnyEntryForUser(userId, id, spaceId);
+    if (!readingSpace || !READING_SPACE_TYPES.includes(readingSpace.entryType)) {
+      throw new HttpError(404, "Reading space not found.");
+    }
+    const sections = await this.libraryRepository.listAllEntries(userId, id, spaceId);
+    const sectionOrder = new Map(READING_SECTION_TYPES.map((type, index) => [type, index]));
+    return sections
+      .filter((section) => sectionOrder.has(section.entryType))
+      .sort((left, right) => sectionOrder.get(left.entryType) - sectionOrder.get(right.entryType));
+  }
+
   async createEntry(userId, libraryId, entryType, body) {
     const id = readId(libraryId, "libraryId");
     await this.getLibrary(userId, id);
@@ -63,14 +120,13 @@ export class LibraryService {
     if (entry.parentEntryId !== null) {
       const parent = await this.libraryRepository.findAnyEntryForUser(userId, id, entry.parentEntryId);
       if (!parent) throw new HttpError(404, "Parent entry not found.");
-      const allowedTypes = parent.entryType === "BOOK"
-        ? BOOK_CHILD_TYPES
-        : parent.entryType === "COLLECTION"
-          ? COLLECTION_CHILD_TYPES
-          : null;
-      if (!allowedTypes) {
-        throw new HttpError(400, "Only books and custom collections can contain entries.");
-      }
+      const allowedTypes = SECTION_CHILD_TYPES.get(parent.entryType)
+        ?? (READING_SPACE_TYPES.includes(parent.entryType)
+          ? new Set(READING_SECTION_TYPES)
+          : parent.entryType === ENTRY_TYPES.COLLECTION
+            ? COLLECTION_CHILD_TYPES
+            : null);
+      if (!allowedTypes) throw new HttpError(400, "Entries can only be added to a reading-space section or custom collection.");
       if (!allowedTypes.has(entryType)) {
         throw new HttpError(400, `${parent.entryType.toLowerCase()} entries cannot contain ${entryType.toLowerCase()} entries.`);
       }
@@ -130,8 +186,10 @@ export class LibraryService {
     if (parentId === null) return;
     const parent = await this.libraryRepository.findAnyEntryForUser(userId, libraryId, parentId);
     if (!parent) throw new HttpError(404, "Parent entry not found.");
-    if (!["BOOK", "COLLECTION"].includes(parent.entryType)) {
-      throw new HttpError(400, "Only books and custom collections can contain entries.");
+    if (!READING_SPACE_TYPES.includes(parent.entryType)
+      && !READING_SECTION_TYPES.includes(parent.entryType)
+      && parent.entryType !== ENTRY_TYPES.COLLECTION) {
+      throw new HttpError(400, "Entries can only be listed inside a reading space, its section, or a custom collection.");
     }
   }
 }

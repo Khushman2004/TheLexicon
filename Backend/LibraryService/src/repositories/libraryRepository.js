@@ -1,4 +1,5 @@
 import { pool, sql } from "../database.js";
+import { READING_SECTIONS, READING_SECTION_TYPES, READING_SPACE_TYPES } from "../config/entryTypes.js";
 
 const LIBRARY_COLUMNS = `
   Id AS id,
@@ -104,7 +105,7 @@ export class LibraryRepository {
       .request()
       .input("userId", sql.Int, userId)
       .input("libraryId", sql.Int, libraryId)
-      .input("entryType", sql.NVarChar(16), entryType)
+      .input("entryType", sql.NVarChar(32), entryType)
       .input("parentEntryId", sql.Int, parentEntryId)
       .query(`
         SELECT ${ENTRY_COLUMNS}
@@ -143,13 +144,31 @@ export class LibraryRepository {
     return result.recordset;
   }
 
+  async listReadingSpaces(userId, libraryId) {
+    const result = await pool
+      .request()
+      .input("userId", sql.Int, userId)
+      .input("libraryId", sql.Int, libraryId)
+      .query(`
+        SELECT ${ENTRY_COLUMNS}
+        FROM dbo.LibraryEntries AS e
+        INNER JOIN dbo.Libraries AS l ON l.Id = e.LibraryId
+        WHERE l.UserId = @userId
+          AND e.LibraryId = @libraryId
+          AND e.ParentEntryId IS NULL
+          AND e.EntryType IN (N'BOOK', N'PAPER', N'ARTICLE')
+        ORDER BY e.Title, e.Id;`);
+
+    return result.recordset;
+  }
+
   async findEntryForUser(userId, libraryId, entryId, entryType) {
     const result = await pool
       .request()
       .input("userId", sql.Int, userId)
       .input("libraryId", sql.Int, libraryId)
       .input("entryId", sql.Int, entryId)
-      .input("entryType", sql.NVarChar(16), entryType)
+      .input("entryType", sql.NVarChar(32), entryType)
       .query(`
         SELECT ${ENTRY_COLUMNS}
         FROM dbo.LibraryEntries AS e
@@ -180,36 +199,62 @@ export class LibraryRepository {
   }
 
   async createEntry(userId, libraryId, entry) {
-    const result = await pool
-      .request()
-      .input("userId", sql.Int, userId)
-      .input("libraryId", sql.Int, libraryId)
-      .input("parentEntryId", sql.Int, entry.parentEntryId)
-      .input("entryType", sql.NVarChar(16), entry.entryType)
-      .input("title", sql.NVarChar(255), entry.title)
-      .input("content", sql.NVarChar(sql.MAX), entry.content)
-      .input("url", sql.NVarChar(2048), entry.url)
-      .query(`
-        INSERT INTO dbo.LibraryEntries
-          (LibraryId, ParentEntryId, EntryType, Title, Content, Url)
-        OUTPUT
-          INSERTED.Id AS id,
-          INSERTED.LibraryId AS libraryId,
-          INSERTED.ParentEntryId AS parentEntryId,
-          INSERTED.EntryType AS entryType,
-          INSERTED.Title AS title,
-          INSERTED.Content AS content,
-          INSERTED.Url AS url,
-          INSERTED.CreatedAt AS createdAt,
-          INSERTED.UpdatedAt AS updatedAt
-        SELECT @libraryId, @parentEntryId, @entryType, @title, @content, @url
-        WHERE EXISTS (
-          SELECT 1
-          FROM dbo.Libraries
-          WHERE Id = @libraryId AND UserId = @userId
-        );`);
+    const transaction = new sql.Transaction(pool);
+    await transaction.begin();
 
-    return result.recordset[0] ?? null;
+    try {
+      const result = await new sql.Request(transaction)
+        .input("userId", sql.Int, userId)
+        .input("libraryId", sql.Int, libraryId)
+        .input("parentEntryId", sql.Int, entry.parentEntryId)
+        .input("entryType", sql.NVarChar(32), entry.entryType)
+        .input("title", sql.NVarChar(255), entry.title)
+        .input("content", sql.NVarChar(sql.MAX), entry.content)
+        .input("url", sql.NVarChar(2048), entry.url)
+        .query(`
+          INSERT INTO dbo.LibraryEntries
+            (LibraryId, ParentEntryId, EntryType, Title, Content, Url)
+          OUTPUT
+            INSERTED.Id AS id,
+            INSERTED.LibraryId AS libraryId,
+            INSERTED.ParentEntryId AS parentEntryId,
+            INSERTED.EntryType AS entryType,
+            INSERTED.Title AS title,
+            INSERTED.Content AS content,
+            INSERTED.Url AS url,
+            INSERTED.CreatedAt AS createdAt,
+            INSERTED.UpdatedAt AS updatedAt
+          SELECT @libraryId, @parentEntryId, @entryType, @title, @content, @url
+          WHERE EXISTS (
+            SELECT 1
+            FROM dbo.Libraries
+            WHERE Id = @libraryId AND UserId = @userId
+          );`);
+      const created = result.recordset[0] ?? null;
+
+      if (created && READING_SPACE_TYPES.includes(entry.entryType)) {
+        const request = new sql.Request(transaction)
+          .input("libraryId", sql.Int, libraryId)
+          .input("readingSpaceId", sql.Int, created.id);
+        READING_SECTIONS.forEach(({ type, title }, index) => {
+          request.input(`sectionType${index}`, sql.NVarChar(32), type);
+          request.input(`sectionTitle${index}`, sql.NVarChar(255), title);
+        });
+        await request.query(`
+          INSERT INTO dbo.LibraryEntries
+            (LibraryId, ParentEntryId, EntryType, Title)
+          VALUES
+            (@libraryId, @readingSpaceId, @sectionType0, @sectionTitle0),
+            (@libraryId, @readingSpaceId, @sectionType1, @sectionTitle1),
+            (@libraryId, @readingSpaceId, @sectionType2, @sectionTitle2);`);
+      }
+
+      await transaction.commit();
+      return created;
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
   }
 
   async updateEntry(userId, libraryId, entryId, entryType, entry) {
@@ -218,7 +263,7 @@ export class LibraryRepository {
       .input("userId", sql.Int, userId)
       .input("libraryId", sql.Int, libraryId)
       .input("entryId", sql.Int, entryId)
-      .input("entryType", sql.NVarChar(16), entryType)
+      .input("entryType", sql.NVarChar(32), entryType)
       .input("title", sql.NVarChar(255), entry.title)
       .input("content", sql.NVarChar(sql.MAX), entry.content)
       .input("url", sql.NVarChar(2048), entry.url)
@@ -273,7 +318,7 @@ export class LibraryRepository {
       .input("userId", sql.Int, userId)
       .input("libraryId", sql.Int, libraryId)
       .input("entryId", sql.Int, entryId)
-      .input("entryType", sql.NVarChar(16), entryType)
+      .input("entryType", sql.NVarChar(32), entryType)
       .query(`
         DELETE e
         FROM dbo.LibraryEntries AS e

@@ -216,8 +216,8 @@ END;
 GO
 
 /*
-    Entries represent words, phrases, idioms, books, articles, and custom
-    collections. Book and collection entries can contain child entries.
+    Entries cover the five library models: words; phrases/idioms; reading
+    spaces; poetry; and research. Reading spaces have default section entries.
 */
 IF OBJECT_ID(N'dbo.LibraryEntries', N'U') IS NULL
 BEGIN
@@ -226,9 +226,9 @@ BEGIN
         Id INT IDENTITY(1,1) NOT NULL,
         LibraryId INT NOT NULL,
         ParentEntryId INT NULL,
-        EntryType NVARCHAR(16) NOT NULL,
+        EntryType NVARCHAR(32) NOT NULL,
         Title NVARCHAR(255) NOT NULL,
-        Content NVARCHAR(MAX) NULL,
+        Content NVARCHAR(MAX) NULL, 
         Url NVARCHAR(2048) NULL,
         CreatedAt DATETIMEOFFSET(7) NOT NULL
             CONSTRAINT DF_LibraryEntries_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
@@ -241,9 +241,57 @@ BEGIN
         CONSTRAINT FK_LibraryEntries_Parent FOREIGN KEY (ParentEntryId, LibraryId)
             REFERENCES dbo.LibraryEntries (Id, LibraryId),
         CONSTRAINT CK_LibraryEntries_EntryType CHECK
-            (EntryType IN (N'WORD', N'PHRASE', N'IDIOM', N'BOOK', N'ARTICLE', N'COLLECTION'))
+            (EntryType IN (N'WORD', N'PHRASE', N'IDIOM', N'BOOK', N'PAPER', N'ARTICLE',
+                           N'COLLECTION', N'POEM', N'POETIC_DEVICE', N'PLAY',
+                           N'CUSTOM_MODEL', N'THEORY', N'RESEARCH', N'WORDS_SECTION',
+                           N'PHRASES_SECTION', N'THEORIES_SECTION'))
     );
 END;
+GO
+
+IF EXISTS
+(
+    SELECT 1
+    FROM sys.check_constraints
+    WHERE parent_object_id = OBJECT_ID(N'dbo.LibraryEntries')
+      AND name = N'CK_LibraryEntries_EntryType'
+)
+BEGIN
+    ALTER TABLE dbo.LibraryEntries DROP CONSTRAINT CK_LibraryEntries_EntryType;
+END;
+GO
+
+IF EXISTS
+(
+    SELECT 1
+    FROM sys.columns
+    WHERE object_id = OBJECT_ID(N'dbo.LibraryEntries')
+      AND name = N'EntryType'
+      AND max_length < 64
+)
+BEGIN
+    IF EXISTS
+    (
+        SELECT 1
+        FROM sys.indexes
+        WHERE object_id = OBJECT_ID(N'dbo.LibraryEntries')
+          AND name = N'IX_LibraryEntries_LibraryId_ParentEntryId'
+    )
+    BEGIN
+        DROP INDEX IX_LibraryEntries_LibraryId_ParentEntryId
+            ON dbo.LibraryEntries;
+    END;
+
+    ALTER TABLE dbo.LibraryEntries ALTER COLUMN EntryType NVARCHAR(32) NOT NULL;
+END;
+GO
+
+ALTER TABLE dbo.LibraryEntries
+    ADD CONSTRAINT CK_LibraryEntries_EntryType CHECK
+        (EntryType IN (N'WORD', N'PHRASE', N'IDIOM', N'BOOK', N'PAPER', N'ARTICLE',
+                       N'COLLECTION', N'POEM', N'POETIC_DEVICE', N'PLAY',
+                       N'CUSTOM_MODEL', N'THEORY', N'RESEARCH', N'WORDS_SECTION',
+                       N'PHRASES_SECTION', N'THEORIES_SECTION'));
 GO
 
 IF NOT EXISTS
@@ -257,6 +305,55 @@ BEGIN
     CREATE INDEX IX_LibraryEntries_LibraryId_ParentEntryId
         ON dbo.LibraryEntries (LibraryId, ParentEntryId, EntryType);
 END;
+GO
+
+/*
+    Add the default subsections to existing books, papers, and articles.
+    The NOT EXISTS checks make this migration safe to rerun.
+*/
+INSERT INTO dbo.LibraryEntries (LibraryId, ParentEntryId, EntryType, Title)
+SELECT readingSpace.LibraryId, readingSpace.Id, section.EntryType, section.Title
+FROM dbo.LibraryEntries AS readingSpace
+CROSS JOIN
+(
+    VALUES
+        (N'WORDS_SECTION', N'Words'),
+        (N'PHRASES_SECTION', N'Phrases'),
+        (N'THEORIES_SECTION', N'Custom theories')
+) AS section (EntryType, Title)
+WHERE readingSpace.EntryType IN (N'BOOK', N'PAPER', N'ARTICLE')
+  AND NOT EXISTS
+  (
+      SELECT 1
+      FROM dbo.LibraryEntries AS existingSection
+      WHERE existingSection.LibraryId = readingSpace.LibraryId
+        AND existingSection.ParentEntryId = readingSpace.Id
+        AND existingSection.EntryType = section.EntryType
+  );
+GO
+
+/*
+    Preserve older direct book contents while moving them into their matching
+    default subsection.
+*/
+UPDATE content
+SET ParentEntryId = section.Id
+FROM dbo.LibraryEntries AS content
+INNER JOIN dbo.LibraryEntries AS readingSpace
+    ON readingSpace.Id = content.ParentEntryId
+   AND readingSpace.LibraryId = content.LibraryId
+INNER JOIN dbo.LibraryEntries AS section
+    ON section.ParentEntryId = readingSpace.Id
+   AND section.LibraryId = readingSpace.LibraryId
+   AND section.EntryType =
+       CASE content.EntryType
+           WHEN N'WORD' THEN N'WORDS_SECTION'
+           WHEN N'PHRASE' THEN N'PHRASES_SECTION'
+           WHEN N'IDIOM' THEN N'PHRASES_SECTION'
+           WHEN N'THEORY' THEN N'THEORIES_SECTION'
+       END
+WHERE readingSpace.EntryType IN (N'BOOK', N'PAPER', N'ARTICLE')
+  AND content.EntryType IN (N'WORD', N'PHRASE', N'IDIOM', N'THEORY');
 GO
 
 /*
