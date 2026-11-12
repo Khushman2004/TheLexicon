@@ -90,13 +90,10 @@ export class LibraryRepository {
       .query(`
         UPDATE dbo.Libraries
         SET Name = @name, UpdatedAt = SYSDATETIMEOFFSET()
-        OUTPUT
-          INSERTED.Id AS id,
-          INSERTED.UserId AS userId,
-          INSERTED.LibraryIndex AS libraryIndex,
-          INSERTED.Name AS name,
-          INSERTED.CreatedAt AS createdAt,
-          INSERTED.UpdatedAt AS updatedAt
+        WHERE UserId = @userId AND Id = @libraryId;
+
+        SELECT ${LIBRARY_COLUMNS}
+        FROM dbo.Libraries
         WHERE UserId = @userId AND Id = @libraryId;`);
 
     return result.recordset[0] ?? null;
@@ -116,6 +113,27 @@ export class LibraryRepository {
         WHERE l.UserId = @userId
           AND e.LibraryId = @libraryId
           AND e.EntryType = @entryType
+          AND (
+            (@parentEntryId IS NULL AND e.ParentEntryId IS NULL)
+            OR e.ParentEntryId = @parentEntryId
+          )
+        ORDER BY e.Title, e.Id;`);
+
+    return result.recordset;
+  }
+
+  async listAllEntries(userId, libraryId, parentEntryId) {
+    const result = await pool
+      .request()
+      .input("userId", sql.Int, userId)
+      .input("libraryId", sql.Int, libraryId)
+      .input("parentEntryId", sql.Int, parentEntryId)
+      .query(`
+        SELECT ${ENTRY_COLUMNS}
+        FROM dbo.LibraryEntries AS e
+        INNER JOIN dbo.Libraries AS l ON l.Id = e.LibraryId
+        WHERE l.UserId = @userId
+          AND e.LibraryId = @libraryId
           AND (
             (@parentEntryId IS NULL AND e.ParentEntryId IS NULL)
             OR e.ParentEntryId = @parentEntryId

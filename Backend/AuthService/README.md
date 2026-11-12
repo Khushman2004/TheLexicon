@@ -13,7 +13,7 @@ npm start
 
 By default, the service connects to `(localdb)\MSSQLLocalDB` using Windows authentication and database `TheLexicon`. Configure another instance or database with `DB_SERVER` and `DB_NAME`. For SQL authentication, set `DB_TRUSTED_CONNECTION=false`, `DB_USER`, and `DB_PASSWORD`.
 
-The service listens on `http://localhost:5000` by default. Set `PORT` to use a different port.
+The service listens on `http://localhost:5000` by default. Set `PORT` to use a different port. For direct browser access from a deployed frontend, set `CORS_ORIGINS` to a comma-separated allowlist of exact frontend origins. Local frontend development uses the Vite proxy.
 
 ## Endpoints
 
@@ -32,3 +32,4 @@ Register with JSON containing `username`, `email`, and `password`. Optional prof
 User records are stored in `TheLexicon.dbo.Users`. Passwords are stored as scrypt hashes. Session tokens expire after 24 hours; only token hashes are persisted in `TheLexicon.dbo.Sessions`, allowing the separate Library Service to validate bearer tokens. New user registration creates the account and its initial library in one transaction.
 
 Start the separate Library Service from `../LibraryService`; see its README for its modules and API.
+The frontend is in `../../Frontend`; see its README for local setup and deployment.

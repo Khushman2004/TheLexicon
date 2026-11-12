@@ -11,9 +11,9 @@ npm install
 npm start
 ```
 
-By default, the service connects to `(localdb)\MSSQLLocalDB` using Windows authentication and database `TheLexicon`. Configure another instance or database with `DB_SERVER` and `DB_NAME`. For SQL authentication, set `DB_TRUSTED_CONNECTION=false`, `DB_USER`, and `DB_PASSWORD`.
+By default, the service connects to `(localdb)\MSSQLLocalDB` using Windows authentication and database `TheLexicon`. Configure another instance or database with `DB_SERVER` and `DB_NAME`. For SQL authentication, set `DB_TRUSTED_CONNECTION=false`, `DB_USER`, and `DB_PASSWORD`. SQL requests time out after 30 seconds by default; set `DB_REQUEST_TIMEOUT_MS` to a different positive millisecond value if your database needs longer.
 
-The service listens on `http://localhost:5001` by default. Set `PORT` to use a different port. Start AuthService separately on port 5000. Both services must use the same database so LibraryService can validate AuthService bearer tokens.
+The service listens on `http://localhost:5001` by default. Set `PORT` to use a different port. Start AuthService separately on port 5000. Both services must use the same database so LibraryService can validate AuthService bearer tokens. For direct browser access from a deployed frontend, set `CORS_ORIGINS` to a comma-separated allowlist of exact frontend origins. Local frontend development uses the Vite proxy.
 
 ## Modules and endpoints
 
@@ -28,6 +28,7 @@ All library endpoints below require `Authorization: Bearer <token>`. `/health` i
 | POST | `/api/libraries` | Create a library (`{"name":"Reading list"}`) |
 | GET | `/api/libraries/:libraryId` | Get a library owned by the signed-in user |
 | PATCH | `/api/libraries/:libraryId` | Rename a library |
+| GET | `/api/libraries/:libraryId/entries` | List all entry types in a library or inside a book/collection |
 | GET, POST | `/api/libraries/:libraryId/words` | List or add words |
 | GET, POST | `/api/libraries/:libraryId/phrases` | List or add phrases |
 | GET, POST | `/api/libraries/:libraryId/idioms` | List or add idioms |
@@ -37,6 +38,8 @@ All library endpoints below require `Authorization: Bearer <token>`. `/health` i
 | PATCH, DELETE | `.../:entryId` | Update or delete an entry of that module's type |
 
 Entries accept a required `title`, optional `content`, and optional HTTP(S) `url`. Add a word, phrase, or idiom inside a book or collection by passing its ID as `parentEntryId` in the create request. Filter a module's list to a container with `?parentId=<id>`. Books can contain words, phrases, and idioms; custom collections can contain words, phrases, idioms, books, and articles. Containers with child entries cannot be deleted until their contents are removed.
+
+The combined entries endpoint returns all entry types in a single request; use it for an unfiltered library view. Type-specific routes remain available when only one module is needed.
 
 Example:
 
@@ -64,3 +67,5 @@ Content-Type: application/json
 ```
 
 Libraries are private to their owner. The database assigns each library a per-user `LibraryIndex`, enforced by a unique index on `(UserId, LibraryIndex)`. The schema stores entries in `TheLexicon.dbo.LibraryEntries`, with a type for each module and parent links for book and collection contents.
+
+The frontend is in `../../Frontend`; see its README for the full sign-in-to-library flow.

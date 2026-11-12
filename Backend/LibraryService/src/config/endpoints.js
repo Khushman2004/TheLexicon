@@ -4,6 +4,7 @@ export const ENDPOINTS = Object.freeze({
     BASE: "/api/libraries",
     ROOT: "/",
     BY_ID: "/:libraryId",
+    ENTRIES: "/:libraryId/entries",
     ENTRY_ROOT: "/",
     ENTRY_BY_ID: "/:entryId",
     WORDS: "/:libraryId/words",

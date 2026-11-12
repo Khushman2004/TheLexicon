@@ -26,6 +26,15 @@ export function createLibraryRoutes(authenticationService, libraryService) {
     response.status(201).json({ library });
   });
 
+  router.get(ENDPOINTS.LIBRARIES.ENTRIES, async (request, response) => {
+    const entries = await libraryService.listAllEntries(
+      request.userId,
+      request.params.libraryId,
+      request.query.parentId,
+    );
+    response.json({ entries });
+  });
+
   router.get(ENDPOINTS.LIBRARIES.BY_ID, async (request, response) => {
     const library = await libraryService.getLibrary(request.userId, request.params.libraryId);
     response.json({ library });

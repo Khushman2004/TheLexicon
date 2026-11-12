@@ -39,15 +39,20 @@ export class LibraryService {
       ? null
       : readId(parentEntryId, "parentId");
 
-    if (parentId !== null) {
-      const parent = await this.libraryRepository.findAnyEntryForUser(userId, id, parentId);
-      if (!parent) throw new HttpError(404, "Parent entry not found.");
-      if (!["BOOK", "COLLECTION"].includes(parent.entryType)) {
-        throw new HttpError(400, "Only books and custom collections can contain entries.");
-      }
-    }
+    await this.validateParent(userId, id, parentId);
 
     return this.libraryRepository.listEntries(userId, id, entryType, parentId);
+  }
+
+  async listAllEntries(userId, libraryId, parentEntryId) {
+    const id = readId(libraryId, "libraryId");
+    await this.getLibrary(userId, id);
+    const parentId = parentEntryId === undefined
+      ? null
+      : readId(parentEntryId, "parentId");
+
+    await this.validateParent(userId, id, parentId);
+    return this.libraryRepository.listAllEntries(userId, id, parentId);
   }
 
   async createEntry(userId, libraryId, entryType, body) {
@@ -118,6 +123,15 @@ export class LibraryService {
     }
     if (!(await this.libraryRepository.deleteEntry(userId, id, itemId, entryType))) {
       throw new HttpError(404, "Library entry not found.");
+    }
+  }
+
+  async validateParent(userId, libraryId, parentId) {
+    if (parentId === null) return;
+    const parent = await this.libraryRepository.findAnyEntryForUser(userId, libraryId, parentId);
+    if (!parent) throw new HttpError(404, "Parent entry not found.");
+    if (!["BOOK", "COLLECTION"].includes(parent.entryType)) {
+      throw new HttpError(400, "Only books and custom collections can contain entries.");
     }
   }
 }
