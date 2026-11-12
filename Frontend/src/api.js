@@ -1,3 +1,5 @@
+import { entryTypeForCategory } from "./catalog.js";
+
 const authBase = (import.meta.env.VITE_AUTH_API_URL || "").replace(/\/+$/, "");
 const libraryBase = (import.meta.env.VITE_LIBRARY_API_URL || "").replace(/\/+$/, "");
 
@@ -10,6 +12,10 @@ export class ApiError extends Error {
 }
 
 async function request(base, path, { token, ...options } = {}) {
+  if (typeof path !== "string" || !path.startsWith("/")) {
+    throw new Error("Cannot send API request: the endpoint path is not configured.");
+  }
+
   let response;
   try {
     response = await fetch(`${base}${path}`, {
@@ -26,7 +32,15 @@ async function request(base, path, { token, ...options } = {}) {
 
   if (response.status === 204) return null;
 
-  const result = await response.json().catch(() => ({}));
+  const responseText = await response.text();
+  let result = {};
+  if (responseText) {
+    try {
+      result = JSON.parse(responseText);
+    } catch {
+      throw new ApiError(`The service returned an invalid response (${response.status}).`, response.status);
+    }
+  }
   if (!response.ok) {
     throw new ApiError(result.error || "Something went wrong. Please try again.", response.status);
   }
@@ -44,17 +58,14 @@ export const authApi = {
   logout: (token) => request(authBase, "/api/auth/logout", { method: "POST", token }),
 };
 
-const categoryRoutes = {
-  word: "words",
-  phrase: "phrases",
-  idiom: "idioms",
-  book: "books",
-  article: "articles",
-  collection: "collections",
-};
-
 function libraryPath(libraryId) {
   return `/api/libraries/${libraryId}`;
+}
+
+function entryPath(libraryId, category) {
+  const entryType = entryTypeForCategory(category);
+  if (!entryType) throw new Error(`Unknown library entry type: ${category}.`);
+  return `${libraryPath(libraryId)}/${entryType.route}`;
 }
 
 export const libraryApi = {
@@ -82,24 +93,32 @@ export const libraryApi = {
 
     const result = await request(
       libraryBase,
-      `${libraryPath(libraryId)}/${categoryRoutes[category]}${query}`,
+      `${entryPath(libraryId, category)}${query}`,
       { token },
     );
     return result.entries;
   },
+  async listReadingSpaces(token, libraryId) {
+    const result = await request(
+      libraryBase,
+      `${libraryPath(libraryId)}/reading-spaces`,
+      { token },
+    );
+    return result.readingSpaces;
+  },
   createEntry: (token, libraryId, category, body) => request(
     libraryBase,
-    `${libraryPath(libraryId)}/${categoryRoutes[category]}`,
+    entryPath(libraryId, category),
     { method: "POST", token, ...jsonBody(body) },
   ),
   updateEntry: (token, libraryId, category, entryId, body) => request(
     libraryBase,
-    `${libraryPath(libraryId)}/${categoryRoutes[category]}/${entryId}`,
+    `${entryPath(libraryId, category)}/${entryId}`,
     { method: "PATCH", token, ...jsonBody(body) },
   ),
   deleteEntry: (token, libraryId, category, entryId) => request(
     libraryBase,
-    `${libraryPath(libraryId)}/${categoryRoutes[category]}/${entryId}`,
+    `${entryPath(libraryId, category)}/${entryId}`,
     { method: "DELETE", token },
   ),
 };

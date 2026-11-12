@@ -6,6 +6,7 @@ export default function EntryDialog({
   initialCategory,
   initialEntry,
   parentEntry,
+  allowedCategories,
   onClose,
   onSave,
 }) {
@@ -16,7 +17,10 @@ export default function EntryDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const titleRef = useRef(null);
-  const activeCategory = ENTRY_TYPES.find((item) => item.id === category) ?? ENTRY_TYPES[0];
+  const selectableCategories = allowedCategories
+    ? ENTRY_TYPES.filter((item) => allowedCategories.includes(item.id))
+    : ENTRY_TYPES;
+  const activeCategory = ENTRY_TYPES.find((item) => item.id === category) ?? selectableCategories[0] ?? ENTRY_TYPES[0];
   const Icon = activeCategory.icon;
 
   useEffect(() => titleRef.current?.focus(), []);
@@ -61,7 +65,7 @@ export default function EntryDialog({
             <label>
               This is a
               <select value={category} onChange={(event) => setCategory(event.target.value)}>
-                {ENTRY_TYPES.map((item) => (
+                {selectableCategories.map((item) => (
                   <option value={item.id} key={item.id}>{item.label}</option>
                 ))}
               </select>

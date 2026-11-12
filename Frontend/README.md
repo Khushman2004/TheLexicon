@@ -1,6 +1,6 @@
 # The Lexicon Frontend
 
-A responsive React app for the AuthService and LibraryService. It follows the user's path from creating an account or signing in, to choosing a library, then collecting and organizing words, phrases, idioms, books, articles, and custom collections.
+A responsive, route-based React app for AuthService and LibraryService. After signing in, each library has its own overview and separate pages for the five models: Words, Phrases & Idioms, Reading Spaces, Poetry & Drama, and Custom Models & Research.
 
 ## Run locally
 
@@ -31,8 +31,10 @@ Configure `CORS_ORIGINS` on **both** backend services to include the exact front
 ## Using the app
 
 - Create an account or sign in. The bearer token is kept in browser local storage and cleared on sign out or when the API reports an expired session.
-- Choose or create a library from the left navigation. New accounts receive a default library from AuthService.
-- Use the type filters or search to browse your entries. Add and edit entries with an optional note and source URL.
-- Open a book or custom collection to view its contents. Add words, phrases, or idioms within books; collections can contain words, phrases, idioms, books, and articles.
+- Choose or create a library from the left navigation. The `/libraries` route lists all your libraries; each `/libraries/:libraryId` route has its own model overview.
+- Open one of the five model pages from the sidebar. Each model and content type has a bookmarkable URL, and browser back/forward navigation works.
+- Add, edit, and delete entries from the model pages. These actions send authenticated `POST`, `PATCH`, and `DELETE` requests to LibraryService; request failures appear in the form or as a notification.
+- Reading spaces are books, papers, or articles. Open a reading space to reach its Words, Phrases, and Custom theories subsections, then add notes within the appropriate section.
+- Sign out from the clearly labeled control in the sidebar or top bar.
 
 All library access is authenticated and scoped to the signed-in user by LibraryService.
