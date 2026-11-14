@@ -15,13 +15,11 @@ import { MODEL_PAGES } from "./catalog.js";
 import AuthPage from "./components/AuthPage.jsx";
 import EntryDialog from "./components/EntryDialog.jsx";
 import LibraryDialog from "./components/LibraryDialog.jsx";
-import {
-  LibraryHomePage,
-  LibrariesPage,
-  ModelPage,
-  ReadingSpacePage,
-  ReadingSpaceSectionPage,
-} from "./pages/WorkspacePages.jsx";
+import LibrariesPage from "./pages/LibrariesPage.jsx";
+import LibraryHomePage from "./pages/LibraryHomePage.jsx";
+import ModelPage from "./pages/ModelPage.jsx";
+import ReadingSpacePage from "./pages/ReadingSpacePage.jsx";
+import ReadingSpaceSectionPage from "./pages/ReadingSpaceSectionPage.jsx";
 
 const TOKEN_KEY = "the-lexicon-token";
 
@@ -298,7 +296,7 @@ function AppSession() {
             ) : <PageLoading loading={loadingLibraries} />}
           />
           <Route
-            path="/libraries/:libraryId/reading-spaces/:spaceId"
+            path="/libraries/:libraryId/reading-spaces/:spaceId/details"
             element={activeLibrary ? <ReadingSpacePage token={token} library={activeLibrary} /> : <PageLoading loading={loadingLibraries} />}
           />
           <Route path="*" element={<Navigate to="/libraries" replace />} />
