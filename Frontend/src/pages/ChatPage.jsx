@@ -10,8 +10,6 @@ export default function ChatPage({ token, currentUserId }) {
   const navigate = useNavigate();
   const socketRef = useRef(null);
   const bottomRef = useRef(null);
-  const activeIdRef = useRef(activeId);
-  activeIdRef.current = activeId;
   const [conversations, setConversations] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -23,6 +21,8 @@ export default function ChatPage({ token, currentUserId }) {
   const [error, setError] = useState("");
 
   const activeId = conversationId ? Number(conversationId) : selectedId ?? conversations[0]?.id;
+  const activeIdRef = useRef(activeId);
+  activeIdRef.current = activeId;
   const activeConversation = useMemo(
     () => conversations.find((conversation) => conversation.id === activeId),
     [conversations, activeId],
