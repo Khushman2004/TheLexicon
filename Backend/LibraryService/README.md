@@ -2,16 +2,18 @@
 
 ## Run locally
 
-1. Execute `../../Db/TheLexicon.sql` in SQL Server Management Studio. It creates or updates the shared schema, preserves existing data, and is safe to rerun.
-2. Ensure the 64-bit Microsoft ODBC Driver 18 for SQL Server and SQL Server LocalDB are installed, or set `DB_SERVER` to your SQL Server instance.
-3. From this directory, install dependencies and start the service:
+1. Install SQL Server Express and the Microsoft ODBC Driver 17 or 18 for SQL Server.
+2. From this directory, run the schema setup through Node.js, then start the service:
 
 ```powershell
 npm install
+npm run db:setup
 npm start
 ```
 
-By default, the service connects to `(localdb)\MSSQLLocalDB` using Windows authentication and database `TheLexicon`. Configure another instance or database with `DB_SERVER` and `DB_NAME`. For SQL authentication, set `DB_TRUSTED_CONNECTION=false`, `DB_USER`, and `DB_PASSWORD`. SQL requests time out after 30 seconds by default; set `DB_REQUEST_TIMEOUT_MS` to another positive millisecond value if needed.
+`npm run db:setup` executes `../../Db/TheLexicon.sql` in batches using Node.js. The setup connects to `master` to create `TheLexicon`, then applies the schema. It preserves data and is safe to rerun; SQL Server Management Studio is not required.
+
+By default, the service uses the supplied SQL Express Windows-auth connection (`Server=localhost\SQLEXPRESS;Database=TheLexicon;Trusted_Connection=True;`). Configure another server/database with `DB_SERVER` and `DB_NAME`, or select an installed ODBC driver with `DB_ODBC_DRIVER`. Windows integrated authentication uses the npm-distributed prebuilt `msnodesqlv8` binary; Visual Studio and Docker are not required. SQL requests time out after 30 seconds by default; set `DB_REQUEST_TIMEOUT_MS` to another positive millisecond value if needed.
 
 The service listens on `http://localhost:5001` by default. Set `PORT` to use a different port. Start AuthService separately on port 5000. Both services must use the same database so LibraryService can validate AuthService bearer tokens. Local frontend development uses the Vite proxy. For direct browser access from a deployed frontend, set `CORS_ORIGINS` to a comma-separated allowlist of exact frontend origins.
 
