@@ -15,7 +15,7 @@ npm start
 
 By default, the service uses the supplied SQL Express Windows-auth connection (`Server=localhost\SQLEXPRESS;Database=TheLexicon;Trusted_Connection=True;`). Configure another server/database with `DB_SERVER` and `DB_NAME`, or select an installed ODBC driver with `DB_ODBC_DRIVER`. Windows integrated authentication uses the npm-distributed prebuilt `msnodesqlv8` binary; Visual Studio and Docker are not required. SQL requests time out after 30 seconds by default; set `DB_REQUEST_TIMEOUT_MS` to another positive millisecond value if needed.
 
-The service listens on `http://localhost:5001` by default. Set `PORT` to use a different port. Start AuthService separately on port 5000. Both services must use the same database so LibraryService can validate AuthService bearer tokens. Local frontend development uses the Vite proxy. For direct browser access from a deployed frontend, set `CORS_ORIGINS` to a comma-separated allowlist of exact frontend origins.
+The service listens on `http://localhost:5001` by default. Set `PORT` to use a different port. Start AuthService on port 5000; NetworkService on 5002 and ChatService on 5003 can also use the shared database. All services must use the same database so they can validate AuthService bearer tokens. Local frontend development uses the Vite proxy. For direct browser access from a deployed frontend, set `CORS_ORIGINS` to a comma-separated allowlist of exact frontend origins.
 
 ## Library models
 
@@ -39,7 +39,14 @@ All library endpoints require `Authorization: Bearer <token>`. `/health` is publ
 | GET | `/api/libraries` | List the signed-in user's libraries |
 | POST | `/api/libraries` | Create a library |
 | GET | `/api/libraries/:libraryId` | Get a library |
-| PATCH | `/api/libraries/:libraryId` | Rename a library |
+| PATCH | `/api/libraries/:libraryId` | Rename a library and/or update its visibility |
+| GET | `/api/libraries/:libraryId/models` | List the five model visibility settings (owner only) |
+| PATCH | `/api/libraries/:libraryId/models/:modelKey` | Update a model visibility setting (owner only) |
+| GET | `/api/libraries/public/libraries` | Discover other users' public libraries |
+| GET | `/api/libraries/public/libraries/:libraryId` | Get a public library and its public models |
+| GET | `/api/libraries/public/libraries/:libraryId/models/:modelKey/entries` | Read entries in a public model; reading-space children use `?parentId=<id>` |
+| GET | `/api/libraries/shared/:libraryId` | Get a public or owner-approved private library |
+| GET | `/api/libraries/shared/:libraryId/models/:modelKey/entries` | Read a public model or any model in a private library explicitly shared with you |
 | GET | `/api/libraries/:libraryId/entries` | List all root entries or entries under `?parentId=<id>` |
 | GET, POST | `/api/libraries/:libraryId/words` | List or add words |
 | GET, POST | `/api/libraries/:libraryId/phrases` | List or add phrases |
@@ -148,8 +155,36 @@ PATCH http://localhost:5001/api/libraries/1/words/12
 
 Delete an entry with `DELETE` to the same typed URL. A reading space or collection with child entries must be emptied before it can be deleted.
 
+## Visibility and sharing
+
+Libraries and each of the five models are private by default. Only the owner can change visibility or create, edit, and delete entries. A model is discoverable only when both its model and parent library are public. Public library/model reads still require an authenticated bearer token; discovery excludes the signed-in user's own libraries. Changing a library back to private immediately removes it and its models from public reads.
+
+Update a library's visibility with:
+
+```http
+PATCH http://localhost:5001/api/libraries/1
+```
+
+```json
+{ "isPublic": true }
+```
+
+The same endpoint accepts `name` and `isPublic` together. Get model keys and current visibility with `GET /api/libraries/1/models`; the keys are `words`, `phrases`, `reading-spaces`, `poetry`, and `research`. For example, share only the words model:
+
+```http
+PATCH http://localhost:5001/api/libraries/1/models/words
+```
+
+```json
+{ "isPublic": true }
+```
+
+Signed-in readers can discover public libraries with `GET /api/libraries/public/libraries`, view a library's public models with `GET /api/libraries/public/libraries/1`, and read a model with `GET /api/libraries/public/libraries/1/models/words/entries`. For reading spaces, pass the returned reading-space or section ID as `?parentId=<id>` to browse its default subsections and shared notes. These public endpoints are read-only.
+
 ## Data model
 
-Libraries are private to their owner. The database assigns each library a per-user `LibraryIndex`, enforced by a unique index on `(UserId, LibraryIndex)`. Typed content is stored in `TheLexicon.dbo.LibraryEntries`; its `EntryType` distinguishes the five models' entry types, and `ParentEntryId` links reading spaces to default sections and sections to their content.
+Libraries are private by default and have an `IsPublic` flag. `TheLexicon.dbo.LibraryModels` stores one private-by-default visibility row for each of the five models in every library; public model reads also require a public parent library. NetworkService-managed grants allow invited users to read all models of a private library, but do not grant writes. The database assigns each library a per-user `LibraryIndex`, enforced by a unique index on `(UserId, LibraryIndex)`. Typed content is stored in `TheLexicon.dbo.LibraryEntries`; its `EntryType` distinguishes the five models' entry types, and `ParentEntryId` links reading spaces to default sections and sections to their content.
+
+Run `npm run db:setup` after updating to apply the rerunnable schema changes and seed model visibility rows for existing libraries.
 
 The frontend is in `../../Frontend`; see its README for setup.

@@ -34,6 +34,42 @@ export function createLibraryRoutes(authenticationService, libraryService) {
     response.status(201).json({ library });
   });
 
+  router.get(ENDPOINTS.LIBRARIES.PUBLIC_LIBRARIES, async (request, response) => {
+    const libraries = await libraryService.listPublicLibraries(request.userId);
+    response.json({ libraries });
+  });
+
+  router.get(ENDPOINTS.LIBRARIES.PUBLIC_LIBRARY, async (request, response) => {
+    const result = await libraryService.getPublicLibrary(request.params.libraryId);
+    response.json(result);
+  });
+
+  router.get(ENDPOINTS.LIBRARIES.PUBLIC_MODEL_ENTRIES, async (request, response) => {
+    const entries = await libraryService.listPublicModelEntries(
+      request.params.libraryId,
+      request.params.modelKey,
+      request.query.parentId,
+    );
+    response.json({ entries });
+  });
+
+  router.get(ENDPOINTS.LIBRARIES.ACCESSIBLE_LIBRARY, async (request, response) => {
+    response.json(await libraryService.getAccessibleLibrary(
+      request.userId,
+      request.params.libraryId,
+    ));
+  });
+
+  router.get(ENDPOINTS.LIBRARIES.ACCESSIBLE_MODEL_ENTRIES, async (request, response) => {
+    const entries = await libraryService.listAccessibleModelEntries(
+      request.userId,
+      request.params.libraryId,
+      request.params.modelKey,
+      request.query.parentId,
+    );
+    response.json({ entries });
+  });
+
   router.get(ENDPOINTS.LIBRARIES.ENTRIES, async (request, response) => {
     const entries = await libraryService.listAllEntries(
       request.userId,
@@ -55,6 +91,21 @@ export function createLibraryRoutes(authenticationService, libraryService) {
       request.body,
     );
     response.json({ library });
+  });
+
+  router.get(ENDPOINTS.LIBRARIES.MODELS, async (request, response) => {
+    const models = await libraryService.listModels(request.userId, request.params.libraryId);
+    response.json({ models });
+  });
+
+  router.patch(`${ENDPOINTS.LIBRARIES.MODELS}${ENDPOINTS.LIBRARIES.MODEL_BY_ID}`, async (request, response) => {
+    const model = await libraryService.updateModelVisibility(
+      request.userId,
+      request.params.libraryId,
+      request.params.modelKey,
+      request.body,
+    );
+    response.json({ model });
   });
 
   router.use(ENDPOINTS.LIBRARIES.WORDS, createWordRoutes(libraryService));

@@ -1,6 +1,6 @@
 # The Lexicon
 
-The Lexicon is a personal library for collecting words, phrases, reading notes, poetry, and research. It consists of a React frontend, two Node.js/Express backend services, and a Microsoft SQL Server database.
+The Lexicon is a personal library for collecting words, phrases, reading notes, poetry, and research. It consists of a React frontend, four Node.js/Express backend services, and a Microsoft SQL Server database.
 
 ## Features
 
@@ -19,33 +19,32 @@ The Lexicon is a personal library for collecting words, phrases, reading notes, 
 ## Technology
 
 - **Frontend:** React 18, React Router, Vite, and Lucide icons
-- **Backend:** Node.js ES modules, Express 5
-- **Database:** Microsoft SQL Server, accessed via `mssql`, `msnodesqlv8`, and Microsoft ODBC Driver 18
+- **Backend:** Node.js ES modules, Express 5, Socket.IO
+- **Database:** Microsoft SQL Server, accessed via `mssql`, `msnodesqlv8`, and Microsoft ODBC Driver 17 or 18
 
 ## Requirements
 
 Install the following before starting:
 
 - Node.js and npm
-- Microsoft SQL Server LocalDB, or another SQL Server instance (for example, SQL Server Express)
-- The **64-bit Microsoft ODBC Driver 18 for SQL Server**
-- SQL Server Management Studio (SSMS) to run the database script, or `sqlcmd`
+- Microsoft SQL Server Express (or another SQL Server instance)
+- Microsoft ODBC Driver 17 or 18 for SQL Server
 
-The backend defaults to LocalDB at `(localdb)\MSSQLLocalDB`, uses Windows authentication, and connects to the `TheLexicon` database.
+The backend defaults to SQL Server Express at `localhost\SQLEXPRESS`, uses Windows authentication, and connects to the `TheLexicon` database.
 
 ## Run from scratch on Windows
 
 ### 1. Create or update the database
 
-Run [`Db/TheLexicon.sql`](Db/TheLexicon.sql) in SSMS. It creates the `TheLexicon` database and its schema, preserves existing data, and is safe to run again.
-
-Alternatively, for a SQL Server Express instance named `SQLEXPRESS`, run this in PowerShell:
+For a SQL Server Express instance named `SQLEXPRESS`, apply the database script through Node.js. From PowerShell:
 
 ```powershell
-sqlcmd -S ".\SQLEXPRESS" -E -C -i "D:\Lexicon\TheLexicon\Db\TheLexicon.sql"
+cd D:\Lexicon\TheLexicon\Backend\LibraryService
+npm install
+npm run db:setup
 ```
 
-Change the script path if you cloned the repository somewhere else. `-C` allows `sqlcmd` to trust the SQL Server certificate for this local connection.
+The setup uses the current `DB_SERVER` and `DB_NAME` settings, creates or updates the database, preserves existing data, and is safe to rerun. SQL Server Management Studio is not required.
 
 ### 2. Start AuthService
 
@@ -71,18 +70,42 @@ npm start
 
 It listens at `http://localhost:5001` by default. Keep this terminal open too.
 
-If you are using SQL Server Express instead of LocalDB, set the instance in **both** backend terminals before starting the service:
+### 4. Start NetworkService
+
+Open another PowerShell terminal:
+
+```powershell
+cd D:\Lexicon\TheLexicon\Backend\NetworkService
+npm install
+npm start
+```
+
+It listens at `http://localhost:5002` by default. It provides profiles, follows, saved public libraries, private-library access requests, and owner approvals.
+
+### 5. Start ChatService
+
+Open another PowerShell terminal:
+
+```powershell
+cd D:\Lexicon\TheLexicon\Backend\ChatService
+npm install
+npm start
+```
+
+It listens at `http://localhost:5003` by default. It provides persistent, live one-to-one chat and online presence for mutual followers.
+
+All four services must use the **same database**. If needed, set the SQL Server Express instance in each backend terminal:
 
 ```powershell
 $env:DB_SERVER = ".\SQLEXPRESS"
 npm start
 ```
 
-The environment variable applies only to that terminal session. AuthService and LibraryService must point to the **same database**.
+The environment variable applies only to that terminal session. NetworkService and ChatService reuse LibraryService's shared SQL adapter and do not install duplicate native SQL drivers.
 
-### 4. Start the frontend
+### 6. Start the frontend
 
-Open a **third** PowerShell terminal:
+Open another PowerShell terminal:
 
 ```powershell
 cd D:\Lexicon\TheLexicon\Frontend
@@ -90,33 +113,31 @@ npm install
 npm run dev
 ```
 
-Open the Vite URL shown in the terminal (normally `http://localhost:5173`). The Vite development proxy sends `/api/auth` to AuthService and `/api/libraries` to LibraryService.
+Open the Vite URL shown in the terminal (normally `http://localhost:5173`). Vite proxies REST requests to all four services and `/socket.io` to ChatService.
 
-### 5. Create an account and sign in
+### 7. Create an account and sign in
 
 Choose **Create account** in the app and enter a username, email, and password. Usernames must be 3–32 letters, numbers, or underscores; passwords must be 8–128 characters. Then sign in with that email and password. There is no preconfigured default account.
 
 ## Configuration
 
-Both backend services read these environment variables:
+All backend services read these environment variables:
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `DB_SERVER` | `(localdb)\MSSQLLocalDB` | SQL Server instance |
+| `DB_SERVER` | `localhost\SQLEXPRESS` | SQL Server instance |
 | `DB_NAME` | `TheLexicon` | Database name |
-| `DB_TRUSTED_CONNECTION` | `true` | Use Windows authentication unless set to `false` |
-| `DB_USER` | — | SQL login when `DB_TRUSTED_CONNECTION=false` |
-| `DB_PASSWORD` | — | SQL password when `DB_TRUSTED_CONNECTION=false` |
-| `PORT` | `5000` for AuthService; `5001` for LibraryService | Service port |
+| `DB_ODBC_DRIVER` | `ODBC Driver 17 for SQL Server` | Installed SQL Server ODBC driver |
+| `PORT` | `5000` Auth; `5001` Library; `5002` Network; `5003` Chat | Service port |
 
-LibraryService also supports `DB_REQUEST_TIMEOUT_MS` (default `30000`). For SQL authentication, set `DB_TRUSTED_CONNECTION=false` and provide `DB_USER` and `DB_PASSWORD`.
+LibraryService also supports `DB_REQUEST_TIMEOUT_MS` (default `30000`). All services use Windows trusted authentication and must use the same SQL Express instance and database.
 
 The frontend's [`Frontend/.env.example`](Frontend/.env.example) documents optional settings:
 
-- `AUTH_SERVICE_TARGET` and `LIBRARY_SERVICE_TARGET` override the Vite development proxy targets.
-- `VITE_AUTH_API_URL` and `VITE_LIBRARY_API_URL` set the API origins used by a built/deployed frontend. Leave them blank for local development through the proxy.
+- `AUTH_SERVICE_TARGET`, `LIBRARY_SERVICE_TARGET`, `NETWORK_SERVICE_TARGET`, and `CHAT_SERVICE_TARGET` override Vite proxy targets.
+- `VITE_AUTH_API_URL`, `VITE_LIBRARY_API_URL`, `VITE_NETWORK_API_URL`, and `VITE_CHAT_API_URL` set API origins for deployed builds. Leave them blank for local proxy development.
 
-For deployment, configure `CORS_ORIGINS` on **both** backend services to the exact frontend origin(s), comma-separated. Do not use `*` when making authenticated browser requests. Build the frontend after changing its `VITE_` variables.
+For deployment, configure `CORS_ORIGINS` on all backend services to the exact frontend origin(s), comma-separated. ChatService must allow the frontend origin for Socket.IO. Do not use `*` for authenticated browser requests. Build the frontend after changing its `VITE_` variables.
 
 ## Project layout
 
@@ -124,7 +145,9 @@ For deployment, configure `CORS_ORIGINS` on **both** backend services to the exa
 .
 ├── Backend/
 │   ├── AuthService/       # Registration, login, sessions, user data
-│   └── LibraryService/    # Libraries, entry types, ownership and authorization
+│   ├── LibraryService/    # Libraries, entry types, ownership and authorization
+│   ├── NetworkService/    # Profiles, follows, discovery, private-library sharing
+│   └── ChatService/       # Persisted live chat and mutual-follower presence
 ├── Db/
 │   └── TheLexicon.sql     # Idempotent database/schema setup and updates
 ├── Frontend/
@@ -144,6 +167,8 @@ For deployment, configure `CORS_ORIGINS` on **both** backend services to the exa
 2. AuthService verifies credentials and persists users and hashed session tokens. Tokens expire after 24 hours; only token hashes are stored.
 3. The frontend sends authenticated library requests to LibraryService. LibraryService checks the token against the shared database and scopes libraries and entries to the signed-in user.
 4. LibraryService stores typed content in `dbo.LibraryEntries`; parent-entry links represent reading-space sections and their contents.
+5. NetworkService manages profiles and follow relationships. Private-library invitations are hashed, expire, and require owner approval before granting read-only access.
+6. ChatService validates shared sessions and mutual follows for every conversation and message. Socket.IO pushes persisted messages and mutual-follower presence.
 
 The main frontend routes are:
 
@@ -154,6 +179,11 @@ The main frontend routes are:
 | `/libraries/:libraryId/:modelId/:typeRoute?` | Model and entry-type pages |
 | `/libraries/:libraryId/reading-spaces/:spaceId/details` | Reading-space sections |
 | `/libraries/:libraryId/reading-spaces/:spaceId/sections/:sectionId` | Entries in a reading-space section |
+| `/network` | Search readers, follow them, discover public libraries |
+| `/profiles/:userId` | View a reader profile and public shelves |
+| `/saved` | View saved public libraries and approved private shares |
+| `/share/:token` | Request owner-approved access to a private library |
+| `/messages` | Live conversations with mutual followers |
 
 ## API overview
 
@@ -178,11 +208,21 @@ LibraryService (`http://localhost:5001`):
 | `GET`, `POST` | `/api/libraries/:libraryId/{words,phrases,idioms,books,papers,articles,poems,poetic-devices,plays,custom-models,theories,research,collections}` | List or create typed entries |
 | `GET`, `POST` | `/api/libraries/:libraryId/reading-spaces` | List or create books, papers, and articles as reading spaces |
 | `PATCH`, `DELETE` | `/api/libraries/:libraryId/:entryType/:entryId` | Update or delete a typed entry |
+| `GET` | `/api/libraries/:libraryId/models` | List model visibility settings |
+| `PATCH` | `/api/libraries/:libraryId/models/:modelKey` | Update model visibility |
+| `GET` | `/api/libraries/public/libraries/:libraryId` | Read a public library |
+| `GET` | `/api/libraries/public/libraries/:libraryId/models/:modelKey/entries` | Read a public model |
+| `GET` | `/api/libraries/shared/:libraryId` | Read a public or owner-approved shared library |
+| `GET` | `/api/libraries/shared/:libraryId/models/:modelKey/entries` | Read a public or explicitly shared model |
 
-Except for `/health`, LibraryService endpoints require `Authorization: Bearer <token>`. See the service READMEs for endpoint details and example payloads:
+NetworkService (`http://localhost:5002`) provides authenticated profile editing/search, follows, public library discovery and saving, and private-library invitations that require owner approval. ChatService (`http://localhost:5003`) provides authenticated conversation history and mutual-follower-only Socket.IO messages and online presence. Their complete endpoint and event contracts are in the linked service READMEs below.
+
+Except for `/health`, authenticated endpoints across LibraryService, NetworkService, and ChatService require `Authorization: Bearer <token>`; Socket.IO uses the same token in its handshake auth object. See the service READMEs for endpoint details and example payloads:
 
 - [`Backend/AuthService/README.md`](Backend/AuthService/README.md)
 - [`Backend/LibraryService/README.md`](Backend/LibraryService/README.md)
+- [`Backend/NetworkService/README.md`](Backend/NetworkService/README.md)
+- [`Backend/ChatService/README.md`](Backend/ChatService/README.md)
 - [`Frontend/README.md`](Frontend/README.md)
 
 ## Build and health checks
@@ -199,12 +239,14 @@ With the services running, check their health endpoints in a browser or with `cu
 ```text
 http://localhost:5000/health
 http://localhost:5001/health
+http://localhost:5002/health
+http://localhost:5003/health
 ```
 
 ## Troubleshooting
 
-- **“Server is not found or not accessible” for `(localdb)\MSSQLLocalDB`:** Install/start LocalDB, or use an available SQL Server instance by setting `DB_SERVER` in both backend terminals.
-- **Database not found:** Run `Db/TheLexicon.sql` against the same SQL Server instance configured by `DB_SERVER`.
+- **SQL Server unavailable:** Start the SQL Express `SQLEXPRESS` instance, or set `DB_SERVER` to the same SQL Server instance in each service terminal.
+- **Database not found or social tables missing:** Run `npm run db:setup` from `Backend\LibraryService` against the same SQL Server instance configured by `DB_SERVER`.
 - **Library API returns `500`:** Check the LibraryService terminal for the underlying error. Verify that it is running and uses the same server/database as AuthService.
-- **Frontend API request fails:** Keep both backend services running, check the Vite proxy targets, and confirm the backend ports.
+- **Frontend API request or chat connection fails:** Keep all four backend services running, check the Vite proxy targets, and confirm the backend ports.
 - **Sign-in or registration fails:** Confirm the database script was applied and check the AuthService terminal.

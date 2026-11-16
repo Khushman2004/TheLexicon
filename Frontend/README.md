@@ -4,7 +4,7 @@ A responsive, route-based React app for AuthService and LibraryService. After si
 
 ## Run locally
 
-Start AuthService and LibraryService in separate terminals first. Both must use the same `TheLexicon` database and the updated `Db/TheLexicon.sql` schema. AuthService listens on port `5000`; LibraryService listens on port `5001`.
+Start AuthService, LibraryService, NetworkService, and ChatService in separate terminals. They must use the same `TheLexicon` database and the updated `Db/TheLexicon.sql` schema. Their default ports are `5000`, `5001`, `5002`, and `5003`.
 
 From this directory:
 
@@ -13,9 +13,9 @@ npm install
 npm run dev
 ```
 
-Vite serves the frontend at `http://localhost:5173`. Its development proxy forwards `/api/auth` to AuthService and `/api/libraries` to LibraryService, so the browser uses one origin locally.
+Vite serves the frontend at `http://localhost:5173`. Its development proxy forwards requests to all four services and the `/socket.io` WebSocket to ChatService, so the browser uses one origin locally.
 
-Copy `.env.example` to `.env.local` to override proxy targets. For example, set `AUTH_SERVICE_TARGET` and `LIBRARY_SERVICE_TARGET` if either service listens on a different host or port.
+Copy `.env.example` to `.env.local` to override proxy targets. Set `AUTH_SERVICE_TARGET`, `LIBRARY_SERVICE_TARGET`, `NETWORK_SERVICE_TARGET`, or `CHAT_SERVICE_TARGET` when a service uses another host or port.
 
 ## Deployment
 
@@ -24,9 +24,11 @@ Set `VITE_AUTH_API_URL` and `VITE_LIBRARY_API_URL` to the origin of each deploye
 ```text
 VITE_AUTH_API_URL=https://auth.example.com
 VITE_LIBRARY_API_URL=https://library.example.com
+VITE_NETWORK_API_URL=https://network.example.com
+VITE_CHAT_API_URL=https://chat.example.com
 ```
 
-Configure `CORS_ORIGINS` on **both** backend services to include the exact frontend origin (comma-separated for multiple origins), such as `https://lexicon.example.com`. Do not use `*` for the origin when sending authorization headers. Rebuild the frontend after changing its `VITE_` variables.
+Configure `CORS_ORIGINS` on all backend services to include the exact frontend origin (comma-separated for multiple origins), such as `https://lexicon.example.com`. ChatService must allow the frontend origin for Socket.IO/WebSocket connections too. Do not use `*` for the origin when sending authorization headers. Rebuild the frontend after changing its `VITE_` variables.
 
 ## Using the app
 
@@ -35,6 +37,12 @@ Configure `CORS_ORIGINS` on **both** backend services to include the exact front
 - Open one of the five model pages from the sidebar. Each model and content type has a bookmarkable URL, and browser back/forward navigation works.
 - Add, edit, and delete entries from the model pages. These actions send authenticated `POST`, `PATCH`, and `DELETE` requests to LibraryService; request failures appear in the form or as a notification.
 - Reading spaces are books, papers, or articles. Open a reading space to reach its Words, Phrases, and Custom theories subsections, then add notes within the appropriate section.
+- From a library overview, make the library and each model public or private independently. A public model is viewable only while its library is public.
+- Use **Discover public** in the sidebar to browse other signed-in users' shared libraries and read their public models. Shared content is read-only.
+- Open **People & libraries** to search and follow readers, view profiles, browse public libraries, and save a library to **Saved shelves**.
+- Edit your profile at **Your profile**. Profile visibility controls whether the profile appears in people search.
+- On a private library overview, create a time-limited invite URL. A signed-in recipient requests access; the owner approves or declines requests and can revoke access later. Approved private libraries are read-only and appear in **Saved shelves**.
+- **Messages** are live between mutual followers only. Chat history is persisted; online presence is shown only to mutual followers.
 - Sign out from the clearly labeled control in the sidebar or top bar.
 
-All library access is authenticated and scoped to the signed-in user by LibraryService.
+All library writes are authenticated and scoped to the owner by LibraryService. Public and approved private library reads, network features, and chat require authentication.

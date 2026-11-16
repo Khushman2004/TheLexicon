@@ -1,4 +1,5 @@
 import { HttpError } from "../utils/httpError.js";
+import { findLibraryModel } from "../config/libraryModels.js";
 import { ENTRY_TYPES, READING_SECTION_TYPES, READING_SPACE_TYPES } from "../config/entryTypes.js";
 
 const COLLECTION_CHILD_TYPES = new Set([
@@ -40,13 +41,102 @@ export class LibraryService {
   }
 
   async updateLibrary(userId, libraryId, body) {
-    const library = await this.libraryRepository.updateName(
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      throw new HttpError(400, "Request body must be a JSON object.");
+    }
+    const updates = {};
+    if (Object.hasOwn(body, "name")) {
+      updates.name = readName(body, "name", "Library name", 100);
+    }
+    if (Object.hasOwn(body, "isPublic")) {
+      updates.isPublic = readBoolean(body.isPublic, "isPublic");
+    }
+    if (!Object.keys(updates).length) {
+      throw new HttpError(400, "Provide a library name or visibility to update.");
+    }
+
+    const library = await this.libraryRepository.update(
       userId,
       readId(libraryId, "libraryId"),
-      readName(body, "name", "Library name", 100),
+      updates,
     );
     if (!library) throw new HttpError(404, "Library not found.");
     return library;
+  }
+
+  async listModels(userId, libraryId) {
+    const id = readId(libraryId, "libraryId");
+    await this.getLibrary(userId, id);
+    return this.libraryRepository.listModels(userId, id);
+  }
+
+  async updateModelVisibility(userId, libraryId, modelKey, body) {
+    const id = readId(libraryId, "libraryId");
+    await this.getLibrary(userId, id);
+    if (!findLibraryModel(modelKey)) throw new HttpError(404, "Library model not found.");
+    if (!body || typeof body !== "object" || Array.isArray(body)
+      || !Object.hasOwn(body, "isPublic")) {
+      throw new HttpError(400, "Provide an isPublic boolean.");
+    }
+
+    const model = await this.libraryRepository.updateModelVisibility(
+      userId,
+      id,
+      modelKey,
+      readBoolean(body.isPublic, "isPublic"),
+    );
+    if (!model) throw new HttpError(404, "Library model not found.");
+    return model;
+  }
+
+  async listPublicLibraries(userId) {
+    return this.libraryRepository.listPublic(userId);
+  }
+
+  async getPublicLibrary(libraryId) {
+    const id = readId(libraryId, "libraryId");
+    const library = await this.libraryRepository.findPublicLibrary(id);
+    if (!library) throw new HttpError(404, "Public library not found.");
+    const models = await this.libraryRepository.listPublicModels(id);
+    return { library, models };
+  }
+
+  async listPublicModelEntries(libraryId, modelKey, parentEntryId) {
+    const id = readId(libraryId, "libraryId");
+    if (!findLibraryModel(modelKey)) throw new HttpError(404, "Library model not found.");
+    const library = await this.libraryRepository.findPublicLibrary(id);
+    if (!library) throw new HttpError(404, "Public library not found.");
+    const models = await this.libraryRepository.listPublicModels(id);
+    if (!models.some((model) => model.modelKey === modelKey)) {
+      throw new HttpError(404, "Public library model not found.");
+    }
+    const parentId = parentEntryId === undefined
+      ? null
+      : readId(parentEntryId, "parentId");
+    return this.libraryRepository.listPublicEntries(id, modelKey, parentId);
+  }
+
+  async getAccessibleLibrary(userId, libraryId) {
+    const id = readId(libraryId, "libraryId");
+    const library = await this.libraryRepository.findAccessibleLibrary(userId, id);
+    if (!library) throw new HttpError(404, "Shared library not found.");
+    const models = await this.libraryRepository.listAccessibleModels(userId, id);
+    return { library, models };
+  }
+
+  async listAccessibleModelEntries(userId, libraryId, modelKey, parentEntryId) {
+    const id = readId(libraryId, "libraryId");
+    if (!findLibraryModel(modelKey)) throw new HttpError(404, "Library model not found.");
+    const library = await this.libraryRepository.findAccessibleLibrary(userId, id);
+    if (!library) throw new HttpError(404, "Shared library not found.");
+    const models = await this.libraryRepository.listAccessibleModels(userId, id);
+    if (!models.some((model) => model.modelKey === modelKey)) {
+      throw new HttpError(404, "Shared library model not found.");
+    }
+    const parentId = parentEntryId === undefined
+      ? null
+      : readId(parentEntryId, "parentId");
+    return this.libraryRepository.listAccessibleEntries(userId, id, modelKey, parentId);
   }
 
   async listEntries(userId, libraryId, entryType, parentEntryId) {
@@ -220,6 +310,13 @@ function readName(body, field, label, maxLength) {
     throw new HttpError(400, `${label} must be a non-empty string of at most ${maxLength} characters.`);
   }
   return value.trim();
+}
+
+function readBoolean(value, label) {
+  if (typeof value !== "boolean") {
+    throw new HttpError(400, `${label} must be a boolean.`);
+  }
+  return value;
 }
 
 function readOptionalText(value, label, maxLength) {

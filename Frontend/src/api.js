@@ -2,6 +2,8 @@ import { entryTypeForCategory } from "./catalog.js";
 
 const authBase = (import.meta.env.VITE_AUTH_API_URL || "").replace(/\/+$/, "");
 const libraryBase = (import.meta.env.VITE_LIBRARY_API_URL || "").replace(/\/+$/, "");
+const networkBase = (import.meta.env.VITE_NETWORK_API_URL || "").replace(/\/+$/, "");
+const chatBase = (import.meta.env.VITE_CHAT_API_URL || "").replace(/\/+$/, "");
 
 export class ApiError extends Error {
   constructor(message, status) {
@@ -80,6 +82,55 @@ export const libraryApi = {
     token,
     ...jsonBody({ name }),
   }),
+  updateLibrary: (token, libraryId, updates) => request(libraryBase, libraryPath(libraryId), {
+    method: "PATCH",
+    token,
+    ...jsonBody(updates),
+  }),
+  listModels: async (token, libraryId) => {
+    const result = await request(libraryBase, `${libraryPath(libraryId)}/models`, { token });
+    return result.models;
+  },
+  updateModelVisibility: async (token, libraryId, modelKey, isPublic) => {
+    const result = await request(
+      libraryBase,
+      `${libraryPath(libraryId)}/models/${encodeURIComponent(modelKey)}`,
+      { method: "PATCH", token, ...jsonBody({ isPublic }) },
+    );
+    return result.model;
+  },
+  listPublic: async (token) => {
+    const result = await request(libraryBase, "/api/libraries/public/libraries", { token });
+    return result.libraries;
+  },
+  getPublic: (token, libraryId) => request(
+    libraryBase,
+    `/api/libraries/public/libraries/${libraryId}`,
+    { token },
+  ),
+  async listPublicEntries(token, libraryId, modelKey, parentId) {
+    const query = parentId ? `?parentId=${encodeURIComponent(parentId)}` : "";
+    const result = await request(
+      libraryBase,
+      `/api/libraries/public/libraries/${libraryId}/models/${encodeURIComponent(modelKey)}/entries${query}`,
+      { token },
+    );
+    return result.entries;
+  },
+  getAccessible: (token, libraryId) => request(
+    libraryBase,
+    `/api/libraries/shared/${libraryId}`,
+    { token },
+  ),
+  async listAccessibleEntries(token, libraryId, modelKey, parentId) {
+    const query = parentId ? `?parentId=${encodeURIComponent(parentId)}` : "";
+    const result = await request(
+      libraryBase,
+      `/api/libraries/shared/${libraryId}/models/${encodeURIComponent(modelKey)}/entries${query}`,
+      { token },
+    );
+    return result.entries;
+  },
   async listEntries(token, libraryId, category, parentId) {
     const query = parentId ? `?parentId=${encodeURIComponent(parentId)}` : "";
     if (category === "all") {
@@ -122,3 +173,116 @@ export const libraryApi = {
     { method: "DELETE", token },
   ),
 };
+
+export const networkApi = {
+  getMyProfile: (token) => request(networkBase, "/api/network/profile", { token }),
+  updateProfile: (token, updates) => request(networkBase, "/api/network/profile", {
+    method: "PATCH",
+    token,
+    ...jsonBody(updates),
+  }),
+  searchUsers: (token, search) => request(
+    networkBase,
+    `/api/network/users?search=${encodeURIComponent(search)}`,
+    { token },
+  ),
+  getUser: (token, userId) => request(networkBase, `/api/network/users/${userId}`, { token }),
+  follow: (token, userId) => request(networkBase, `/api/network/users/${userId}/follow`, {
+    method: "POST",
+    token,
+  }),
+  unfollow: (token, userId) => request(networkBase, `/api/network/users/${userId}/follow`, {
+    method: "DELETE",
+    token,
+  }),
+  connections: async (token, direction) => {
+    const result = await request(networkBase, `/api/network/connections/${direction}`, { token });
+    return result.users;
+  },
+  discoverLibraries: async (token, ownerId) => {
+    const query = ownerId ? `?ownerId=${encodeURIComponent(ownerId)}` : "";
+    const result = await request(networkBase, `/api/network/libraries/discover${query}`, { token });
+    return result.libraries;
+  },
+  savedLibraries: async (token) => {
+    const result = await request(networkBase, "/api/network/libraries/saved", { token });
+    return result.libraries;
+  },
+  sharedLibraries: async (token) => {
+    const result = await request(networkBase, "/api/network/libraries/shared", { token });
+    return result.libraries;
+  },
+  saveLibrary: (token, libraryId) => request(networkBase, `/api/network/libraries/${libraryId}/save`, {
+    method: "POST",
+    token,
+  }),
+  unsaveLibrary: (token, libraryId) => request(networkBase, `/api/network/libraries/${libraryId}/save`, {
+    method: "DELETE",
+    token,
+  }),
+  createInvite: (token, libraryId) => request(
+    networkBase,
+    `/api/network/libraries/${libraryId}/invites`,
+    { method: "POST", token, ...jsonBody({ expiresInHours: 168 }) },
+  ),
+  listInvites: async (token, libraryId) => {
+    const result = await request(networkBase, `/api/network/libraries/${libraryId}/invites`, { token });
+    return result.invites;
+  },
+  revokeInvite: (token, libraryId, inviteId) => request(
+    networkBase,
+    `/api/network/libraries/${libraryId}/invites/${inviteId}`,
+    { method: "DELETE", token },
+  ),
+  getInvitation: (token, shareToken) => request(
+    networkBase,
+    `/api/network/invitations/${encodeURIComponent(shareToken)}`,
+    { token },
+  ),
+  requestLibraryAccess: (token, shareToken) => request(
+    networkBase,
+    `/api/network/invitations/${encodeURIComponent(shareToken)}/requests`,
+    { method: "POST", token, ...jsonBody({}) },
+  ),
+  listAccessRequests: async (token, libraryId) => {
+    const result = await request(networkBase, `/api/network/libraries/${libraryId}/access-requests`, { token });
+    return result.requests;
+  },
+  resolveAccessRequest: (token, libraryId, requestId, decision) => request(
+    networkBase,
+    `/api/network/libraries/${libraryId}/access-requests/${requestId}`,
+    { method: "PATCH", token, ...jsonBody({ decision }) },
+  ),
+  listAccessGrants: async (token, libraryId) => {
+    const result = await request(networkBase, `/api/network/libraries/${libraryId}/access`, { token });
+    return result.users;
+  },
+  revokeAccess: (token, libraryId, userId) => request(
+    networkBase,
+    `/api/network/libraries/${libraryId}/access/${userId}`,
+    { method: "DELETE", token },
+  ),
+};
+
+export const chatApi = {
+  listConversations: async (token) => {
+    const result = await request(chatBase, "/api/chat/conversations", { token });
+    return result.conversations;
+  },
+  openConversation: async (token, recipientId) => {
+    const result = await request(chatBase, "/api/chat/conversations", {
+      method: "POST",
+      token,
+      ...jsonBody({ recipientId }),
+    });
+    return result.conversation;
+  },
+  async listMessages(token, conversationId) {
+    const result = await request(chatBase, `/api/chat/conversations/${conversationId}/messages`, { token });
+    return result.messages;
+  },
+};
+
+export function getChatSocketUrl() {
+  return chatBase || window.location.origin;
+}

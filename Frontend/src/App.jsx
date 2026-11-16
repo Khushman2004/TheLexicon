@@ -1,12 +1,17 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   BookMarked,
+  Bookmark,
   Check,
+  Users,
   ChevronRight,
+  Compass,
   Feather,
   LogOut,
+  MessageCircle,
   Menu,
   Plus,
+  UserRound,
   X,
 } from "lucide-react";
 import { BrowserRouter, Link, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
@@ -20,6 +25,13 @@ import LibraryHomePage from "./pages/LibraryHomePage.jsx";
 import ModelPage from "./pages/ModelPage.jsx";
 import ReadingSpacePage from "./pages/ReadingSpacePage.jsx";
 import ReadingSpaceSectionPage from "./pages/ReadingSpaceSectionPage.jsx";
+import PublicLibrariesPage from "./pages/PublicLibrariesPage.jsx";
+import PublicLibraryPage from "./pages/PublicLibraryPage.jsx";
+import NetworkPage from "./pages/NetworkPage.jsx";
+import ProfilePage from "./pages/ProfilePage.jsx";
+import SavedLibrariesPage from "./pages/SavedLibrariesPage.jsx";
+import LibraryInvitePage from "./pages/LibraryInvitePage.jsx";
+import ChatPage from "./pages/ChatPage.jsx";
 
 const TOKEN_KEY = "the-lexicon-token";
 
@@ -34,6 +46,8 @@ export default function App() {
 function AppSession() {
   const navigate = useNavigate();
   const location = useLocation();
+  const locationRef = useRef(location);
+  locationRef.current = location;
   const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY));
   const [user, setUser] = useState(null);
   const [authPending, setAuthPending] = useState(true);
@@ -47,14 +61,19 @@ function AppSession() {
   const libraryId = location.pathname.match(/^\/libraries\/(\d+)/)?.[1] ?? null;
   const activeLibrary = libraries.find((library) => String(library.id) === libraryId) ?? null;
 
-  const clearSession = useCallback(() => {
+  const clearSession = useCallback((returnToCurrentRoute = true) => {
+    const currentLocation = locationRef.current;
+    const currentPath = `${currentLocation.pathname}${currentLocation.search}`;
     localStorage.removeItem(TOKEN_KEY);
     setToken(null);
     setUser(null);
     setLibraries([]);
     setPageError("");
     setDialog(null);
-    navigate("/login", { replace: true });
+    navigate("/login", {
+      replace: true,
+      state: returnToCurrentRoute && currentPath !== "/login" ? { from: currentPath } : null,
+    });
   }, [navigate]);
 
   useEffect(() => {
@@ -109,7 +128,11 @@ function AppSession() {
     setToken(result.token);
     setUser(result.user);
     setPageError("");
-    navigate("/libraries", { replace: true });
+    const returnPath = location.state?.from
+      || (location.pathname !== "/" && location.pathname !== "/login"
+        ? `${location.pathname}${location.search}`
+        : "/libraries");
+    navigate(returnPath, { replace: true });
   }
 
   async function handleLogout() {
@@ -118,7 +141,7 @@ function AppSession() {
     } catch (error) {
       if (!(error instanceof ApiError && error.status === 401)) setToast(error.message);
     } finally {
-      clearSession();
+      clearSession(false);
     }
   }
 
@@ -136,6 +159,20 @@ function AppSession() {
     setLibraries((current) => current.map((item) => item.id === library.id ? library : item));
     setDialog(null);
     setToast("Library name updated.");
+  }
+
+  async function handleUpdateLibraryVisibility(isPublic) {
+    if (!activeLibrary) return;
+    const { library } = await libraryApi.updateLibrary(token, activeLibrary.id, { isPublic });
+    setLibraries((current) => current.map((item) => item.id === library.id ? library : item));
+    setToast(isPublic ? "Library shared with signed-in readers." : "Library made private.");
+  }
+
+  async function handleUpdateModelVisibility(modelKey, isPublic) {
+    if (!activeLibrary) throw new Error("Choose a library before changing model visibility.");
+    const model = await libraryApi.updateModelVisibility(token, activeLibrary.id, modelKey, isPublic);
+    setToast(isPublic ? "Model shared with signed-in readers." : "Model made private.");
+    return model;
   }
 
   async function handleSaveEntry(entryCategory, body) {
@@ -184,6 +221,15 @@ function AppSession() {
             <span className="sidebar-label">YOUR LIBRARIES</span>
             <button className="sidebar-add" onClick={() => setDialog({ type: "library" })} aria-label="Create a library"><Plus size={15} /></button>
           </div>
+          <Link className={`category-nav-item discover-nav-item ${location.pathname.startsWith("/discover") ? "selected" : ""}`} to="/discover" onClick={() => setMobileNavOpen(false)}>
+            <Compass size={16} strokeWidth={1.8} /><span>Discover public</span><ChevronRight className="nav-chevron" size={14} />
+          </Link>
+          <nav className="social-nav" aria-label="Your network">
+            <Link className={`category-nav-item ${location.pathname === "/network" ? "selected" : ""}`} to="/network" onClick={() => setMobileNavOpen(false)}><Users size={16} /><span>People & libraries</span></Link>
+            <Link className={`category-nav-item ${location.pathname === "/saved" ? "selected" : ""}`} to="/saved" onClick={() => setMobileNavOpen(false)}><Bookmark size={16} /><span>Saved shelves</span></Link>
+            <Link className={`category-nav-item ${location.pathname.startsWith("/messages") ? "selected" : ""}`} to="/messages" onClick={() => setMobileNavOpen(false)}><MessageCircle size={16} /><span>Messages</span></Link>
+            <Link className={`category-nav-item ${location.pathname.startsWith("/profile") ? "selected" : ""}`} to="/profile" onClick={() => setMobileNavOpen(false)}><UserRound size={16} /><span>Your profile</span></Link>
+          </nav>
           <div className="library-list">
             {libraries.map((library, index) => (
               <Link
@@ -249,7 +295,7 @@ function AppSession() {
           <button className="icon-button mobile-menu" onClick={() => setMobileNavOpen(true)} aria-label="Open menu"><Menu size={20} /></button>
           <div className="breadcrumb">
             <Link to="/libraries">MY SPACE</Link><ChevronRight size={13} />
-            <strong>{activeLibrary?.name ?? "Your libraries"}</strong>
+            <strong>{activeLibrary?.name ?? (location.pathname.startsWith("/discover") ? "Discover" : "Your libraries")}</strong>
           </div>
           <div className="topbar-right">
             <span className="date-display">{new Intl.DateTimeFormat("en", { weekday: "long", month: "long", day: "numeric" }).format(new Date())}</span>
@@ -268,7 +314,25 @@ function AppSession() {
 
         <Routes>
           <Route path="/libraries" element={<LibrariesPage libraries={libraries} loading={loadingLibraries} onCreate={() => setDialog({ type: "library" })} />} />
-          <Route path="/libraries/:libraryId" element={activeLibrary ? <LibraryHomePage library={activeLibrary} onRename={() => setDialog({ type: "rename-library", name: activeLibrary.name })} /> : <PageLoading loading={loadingLibraries} />} />
+          <Route path="/network" element={<NetworkPage token={token} />} />
+          <Route path="/saved" element={<SavedLibrariesPage token={token} />} />
+          <Route path="/profile" element={<ProfilePage token={token} currentUserId={user.id} onProfileUpdated={(profile) => setUser((current) => ({ ...current, ...profile }))} />} />
+          <Route path="/profiles/:userId" element={<ProfilePage token={token} currentUserId={user.id} onProfileUpdated={(profile) => setUser((current) => ({ ...current, ...profile }))} />} />
+          <Route path="/share/:shareToken" element={<LibraryInvitePage token={token} />} />
+          <Route path="/messages/new/:recipientId" element={<ChatPage token={token} currentUserId={user.id} />} />
+          <Route path="/messages/:conversationId?" element={<ChatPage token={token} currentUserId={user.id} />} />
+          <Route path="/discover" element={<PublicLibrariesPage token={token} />} />
+          <Route path="/discover/:libraryId/:modelKey?" element={<PublicLibraryPage token={token} />} />
+          <Route path="/shared/:libraryId/:modelKey?" element={<PublicLibraryPage token={token} accessType="shared" />} />
+          <Route path="/libraries/:libraryId" element={activeLibrary ? (
+            <LibraryHomePage
+              token={token}
+              library={activeLibrary}
+              onRename={() => setDialog({ type: "rename-library", name: activeLibrary.name })}
+              onUpdateLibraryVisibility={handleUpdateLibraryVisibility}
+              onUpdateModelVisibility={handleUpdateModelVisibility}
+            />
+          ) : <PageLoading loading={loadingLibraries} />} />
           <Route
             path="/libraries/:libraryId/:modelId/:typeRoute?"
             element={activeLibrary ? (

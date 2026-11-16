@@ -17,6 +17,19 @@ export default defineConfig(({ mode }) => {
           target: env.LIBRARY_SERVICE_TARGET || "http://localhost:5001",
           changeOrigin: true,
         },
+        "/api/network": {
+          target: env.NETWORK_SERVICE_TARGET || "http://localhost:5002",
+          changeOrigin: true,
+        },
+        "/api/chat": {
+          target: env.CHAT_SERVICE_TARGET || "http://localhost:5003",
+          changeOrigin: true,
+        },
+        "/socket.io": {
+          target: env.CHAT_SERVICE_TARGET || "http://localhost:5003",
+          changeOrigin: true,
+          ws: true,
+        },
       },
     },
   };

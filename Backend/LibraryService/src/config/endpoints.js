@@ -22,5 +22,12 @@ export const ENDPOINTS = Object.freeze({
     CUSTOM_MODELS: "/:libraryId/custom-models",
     THEORIES: "/:libraryId/theories",
     RESEARCH: "/:libraryId/research",
+    MODELS: "/:libraryId/models",
+    MODEL_BY_ID: "/:modelKey",
+    PUBLIC_LIBRARIES: "/public/libraries",
+    PUBLIC_LIBRARY: "/public/libraries/:libraryId",
+    PUBLIC_MODEL_ENTRIES: "/public/libraries/:libraryId/models/:modelKey/entries",
+    ACCESSIBLE_LIBRARY: "/shared/:libraryId",
+    ACCESSIBLE_MODEL_ENTRIES: "/shared/:libraryId/models/:modelKey/entries",
   }),
 });

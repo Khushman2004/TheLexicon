@@ -202,6 +202,14 @@ BEGIN
 END;
 GO
 
+IF COL_LENGTH(N'dbo.Libraries', N'IsPublic') IS NULL
+BEGIN
+    ALTER TABLE dbo.Libraries
+        ADD IsPublic BIT NOT NULL
+            CONSTRAINT DF_Libraries_IsPublic DEFAULT (0) WITH VALUES;
+END;
+GO
+
 IF NOT EXISTS
 (
     SELECT 1
@@ -212,6 +220,252 @@ IF NOT EXISTS
 BEGIN
     CREATE UNIQUE INDEX UX_Libraries_UserId_LibraryIndex
         ON dbo.Libraries (UserId, LibraryIndex);
+END;
+GO
+
+/*
+    Visibility is configured independently for each library model. A public
+    model is visible to authenticated users only when its library is public.
+*/
+IF OBJECT_ID(N'dbo.LibraryModels', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.LibraryModels
+    (
+        LibraryId INT NOT NULL,
+        ModelKey NVARCHAR(32) NOT NULL,
+        IsPublic BIT NOT NULL
+            CONSTRAINT DF_LibraryModels_IsPublic DEFAULT (0),
+        UpdatedAt DATETIMEOFFSET(7) NOT NULL
+            CONSTRAINT DF_LibraryModels_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        CONSTRAINT PK_LibraryModels PRIMARY KEY CLUSTERED (LibraryId, ModelKey),
+        CONSTRAINT FK_LibraryModels_Libraries FOREIGN KEY (LibraryId)
+            REFERENCES dbo.Libraries (Id) ON DELETE CASCADE,
+        CONSTRAINT CK_LibraryModels_ModelKey CHECK
+            (ModelKey IN (N'words', N'phrases', N'reading-spaces', N'poetry', N'research'))
+    );
+END;
+GO
+
+INSERT INTO dbo.LibraryModels (LibraryId, ModelKey)
+SELECT l.Id, model.ModelKey
+FROM dbo.Libraries AS l
+CROSS JOIN
+(
+    VALUES (N'words'), (N'phrases'), (N'reading-spaces'), (N'poetry'), (N'research')
+) AS model (ModelKey)
+WHERE NOT EXISTS
+(
+    SELECT 1
+    FROM dbo.LibraryModels AS existingModel
+    WHERE existingModel.LibraryId = l.Id
+      AND existingModel.ModelKey = model.ModelKey
+);
+GO
+
+/*
+    Social graph, library bookmarks, and owner-approved private access.
+    Invitation tokens are stored as hashes; only the share URL contains the
+    raw token. Requests require explicit approval by the library owner.
+*/
+IF OBJECT_ID(N'dbo.UserFollows', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.UserFollows
+    (
+        FollowerUserId INT NOT NULL,
+        FollowedUserId INT NOT NULL,
+        CreatedAt DATETIMEOFFSET(7) NOT NULL
+            CONSTRAINT DF_UserFollows_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        CONSTRAINT PK_UserFollows PRIMARY KEY CLUSTERED (FollowerUserId, FollowedUserId),
+        CONSTRAINT FK_UserFollows_Follower FOREIGN KEY (FollowerUserId)
+            REFERENCES dbo.Users (Id),
+        CONSTRAINT FK_UserFollows_Followed FOREIGN KEY (FollowedUserId)
+            REFERENCES dbo.Users (Id),
+        CONSTRAINT CK_UserFollows_NoSelfFollow CHECK (FollowerUserId <> FollowedUserId)
+    );
+END;
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1 FROM sys.indexes
+    WHERE object_id = OBJECT_ID(N'dbo.UserFollows')
+      AND name = N'IX_UserFollows_FollowedUserId'
+)
+BEGIN
+    CREATE INDEX IX_UserFollows_FollowedUserId
+        ON dbo.UserFollows (FollowedUserId, FollowerUserId);
+END;
+GO
+
+IF OBJECT_ID(N'dbo.SavedLibraries', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.SavedLibraries
+    (
+        UserId INT NOT NULL,
+        LibraryId INT NOT NULL,
+        CreatedAt DATETIMEOFFSET(7) NOT NULL
+            CONSTRAINT DF_SavedLibraries_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        CONSTRAINT PK_SavedLibraries PRIMARY KEY CLUSTERED (UserId, LibraryId),
+        CONSTRAINT FK_SavedLibraries_Users FOREIGN KEY (UserId)
+            REFERENCES dbo.Users (Id),
+        CONSTRAINT FK_SavedLibraries_Libraries FOREIGN KEY (LibraryId)
+            REFERENCES dbo.Libraries (Id) ON DELETE CASCADE
+    );
+END;
+GO
+
+IF OBJECT_ID(N'dbo.LibraryInvites', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.LibraryInvites
+    (
+        Id INT IDENTITY(1,1) NOT NULL,
+        LibraryId INT NOT NULL,
+        CreatedByUserId INT NOT NULL,
+        TokenHash CHAR(64) NOT NULL,
+        ExpiresAt DATETIMEOFFSET(7) NOT NULL,
+        RevokedAt DATETIMEOFFSET(7) NULL,
+        CreatedAt DATETIMEOFFSET(7) NOT NULL
+            CONSTRAINT DF_LibraryInvites_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        CONSTRAINT PK_LibraryInvites PRIMARY KEY CLUSTERED (Id),
+        CONSTRAINT UQ_LibraryInvites_TokenHash UNIQUE (TokenHash),
+        CONSTRAINT FK_LibraryInvites_Libraries FOREIGN KEY (LibraryId)
+            REFERENCES dbo.Libraries (Id) ON DELETE CASCADE,
+        CONSTRAINT FK_LibraryInvites_Creator FOREIGN KEY (CreatedByUserId)
+            REFERENCES dbo.Users (Id)
+    );
+END;
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1 FROM sys.indexes
+    WHERE object_id = OBJECT_ID(N'dbo.LibraryInvites')
+      AND name = N'IX_LibraryInvites_LibraryId'
+)
+BEGIN
+    CREATE INDEX IX_LibraryInvites_LibraryId
+        ON dbo.LibraryInvites (LibraryId, CreatedAt DESC);
+END;
+GO
+
+IF OBJECT_ID(N'dbo.LibraryAccessRequests', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.LibraryAccessRequests
+    (
+        Id INT IDENTITY(1,1) NOT NULL,
+        InviteId INT NOT NULL,
+        RequesterUserId INT NOT NULL,
+        Status NVARCHAR(16) NOT NULL
+            CONSTRAINT DF_LibraryAccessRequests_Status DEFAULT (N'PENDING'),
+        RequestedAt DATETIMEOFFSET(7) NOT NULL
+            CONSTRAINT DF_LibraryAccessRequests_RequestedAt DEFAULT (SYSDATETIMEOFFSET()),
+        ResolvedAt DATETIMEOFFSET(7) NULL,
+        CONSTRAINT PK_LibraryAccessRequests PRIMARY KEY CLUSTERED (Id),
+        CONSTRAINT UQ_LibraryAccessRequests_Invite_Requester UNIQUE (InviteId, RequesterUserId),
+        CONSTRAINT FK_LibraryAccessRequests_Invites FOREIGN KEY (InviteId)
+            REFERENCES dbo.LibraryInvites (Id) ON DELETE CASCADE,
+        CONSTRAINT FK_LibraryAccessRequests_Requester FOREIGN KEY (RequesterUserId)
+            REFERENCES dbo.Users (Id),
+        CONSTRAINT CK_LibraryAccessRequests_Status
+            CHECK (Status IN (N'PENDING', N'APPROVED', N'DECLINED'))
+    );
+END;
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1 FROM sys.indexes
+    WHERE object_id = OBJECT_ID(N'dbo.LibraryAccessRequests')
+      AND name = N'IX_LibraryAccessRequests_RequesterUserId'
+)
+BEGIN
+    CREATE INDEX IX_LibraryAccessRequests_RequesterUserId
+        ON dbo.LibraryAccessRequests (RequesterUserId, Status);
+END;
+GO
+
+IF OBJECT_ID(N'dbo.LibraryAccessGrants', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.LibraryAccessGrants
+    (
+        LibraryId INT NOT NULL,
+        UserId INT NOT NULL,
+        GrantedByUserId INT NOT NULL,
+        CreatedAt DATETIMEOFFSET(7) NOT NULL
+            CONSTRAINT DF_LibraryAccessGrants_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        CONSTRAINT PK_LibraryAccessGrants PRIMARY KEY CLUSTERED (LibraryId, UserId),
+        CONSTRAINT FK_LibraryAccessGrants_Libraries FOREIGN KEY (LibraryId)
+            REFERENCES dbo.Libraries (Id) ON DELETE CASCADE,
+        CONSTRAINT FK_LibraryAccessGrants_User FOREIGN KEY (UserId)
+            REFERENCES dbo.Users (Id),
+        CONSTRAINT FK_LibraryAccessGrants_Grantor FOREIGN KEY (GrantedByUserId)
+            REFERENCES dbo.Users (Id)
+    );
+END;
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1 FROM sys.indexes
+    WHERE object_id = OBJECT_ID(N'dbo.LibraryAccessGrants')
+      AND name = N'IX_LibraryAccessGrants_UserId'
+)
+BEGIN
+    CREATE INDEX IX_LibraryAccessGrants_UserId
+        ON dbo.LibraryAccessGrants (UserId, LibraryId);
+END;
+GO
+
+IF OBJECT_ID(N'dbo.ChatConversations', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.ChatConversations
+    (
+        Id INT IDENTITY(1,1) NOT NULL,
+        UserOneId INT NOT NULL,
+        UserTwoId INT NOT NULL,
+        CreatedAt DATETIMEOFFSET(7) NOT NULL
+            CONSTRAINT DF_ChatConversations_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        LastMessageAt DATETIMEOFFSET(7) NULL,
+        CONSTRAINT PK_ChatConversations PRIMARY KEY CLUSTERED (Id),
+        CONSTRAINT UQ_ChatConversations_UserPair UNIQUE (UserOneId, UserTwoId),
+        CONSTRAINT FK_ChatConversations_UserOne FOREIGN KEY (UserOneId)
+            REFERENCES dbo.Users (Id),
+        CONSTRAINT FK_ChatConversations_UserTwo FOREIGN KEY (UserTwoId)
+            REFERENCES dbo.Users (Id),
+        CONSTRAINT CK_ChatConversations_UserOrder CHECK (UserOneId < UserTwoId)
+    );
+END;
+GO
+
+IF OBJECT_ID(N'dbo.ChatMessages', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.ChatMessages
+    (
+        Id BIGINT IDENTITY(1,1) NOT NULL,
+        ConversationId INT NOT NULL,
+        SenderUserId INT NOT NULL,
+        Body NVARCHAR(4000) NOT NULL,
+        CreatedAt DATETIMEOFFSET(7) NOT NULL
+            CONSTRAINT DF_ChatMessages_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        CONSTRAINT PK_ChatMessages PRIMARY KEY CLUSTERED (Id),
+        CONSTRAINT FK_ChatMessages_Conversation FOREIGN KEY (ConversationId)
+            REFERENCES dbo.ChatConversations (Id) ON DELETE CASCADE,
+        CONSTRAINT FK_ChatMessages_Sender FOREIGN KEY (SenderUserId)
+            REFERENCES dbo.Users (Id),
+        CONSTRAINT CK_ChatMessages_Body CHECK (LEN(LTRIM(RTRIM(Body))) > 0)
+    );
+END;
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1 FROM sys.indexes
+    WHERE object_id = OBJECT_ID(N'dbo.ChatMessages')
+      AND name = N'IX_ChatMessages_ConversationId_Id'
+)
+BEGIN
+    CREATE INDEX IX_ChatMessages_ConversationId_Id
+        ON dbo.ChatMessages (ConversationId, Id DESC);
 END;
 GO
 
