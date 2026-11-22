@@ -103,7 +103,9 @@ export default function LibraryHomePage({
       )}
       <div className="visibility-note">
         <LockKeyhole size={16} />
-        <span>A public model is only visible when this library is public. Sharing is limited to signed-in users.</span>
+        <span>{library.isPublic
+          ? "This library is public. Signed-in readers can see only the models marked public."
+          : "Public models are visible to signed-in readers only after this library is made public."}</span>
       </div>
       <div className="home-page-actions">
         <button className="button button-outline" disabled={saving !== ""} onClick={toggleLibraryVisibility}>

@@ -123,7 +123,12 @@ export default function NetworkPage({ token }) {
               ))}
             </div>
           ) : (
-            <EmptyPage title={hasSearched ? "No people found." : "Your network starts here."} description={hasSearched ? "Try another username or name." : "Search for a reader to follow and see their public libraries."} />
+            <EmptyPage
+              title={hasSearched ? "No people found." : "Your network starts here."}
+              description={hasSearched
+                ? "Search excludes your own profile. Try another person's username or full name; email addresses aren't searchable."
+                : "Search for a reader to follow and see their public libraries."}
+            />
           )}
         </>
       ) : (

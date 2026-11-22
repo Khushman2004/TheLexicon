@@ -26,9 +26,10 @@ The Lexicon is a personal library for collecting words, phrases, reading notes, 
 
 Install the following before starting:
 
-- Node.js and npm
+- Node.js 22 or newer and npm
 - Microsoft SQL Server Express (or another SQL Server instance)
 - Microsoft ODBC Driver 17 or 18 for SQL Server
+- Visual Studio C++ Build Tools if the native SQL driver needs to build from source
 
 The backend defaults to SQL Server Express at `localhost\SQLEXPRESS`, uses Windows authentication, and connects to the `TheLexicon` database.
 
@@ -245,7 +246,8 @@ http://localhost:5003/health
 
 ## Troubleshooting
 
-- **SQL Server unavailable:** Start the SQL Express `SQLEXPRESS` instance, or set `DB_SERVER` to the same SQL Server instance in each service terminal.
+- **SQL Server unavailable:** Verify that the SQL Server service for `SQLEXPRESS` is running. If needed, start it from an elevated PowerShell terminal with `Start-Service -Name 'MSSQL$SQLEXPRESS'`. The default connection targets this instance; other SQL Server instances have separate databases and data.
+- **Native SQL driver install fails:** Use Node.js 22 or newer and install the Visual Studio C++ Build Tools workload if npm falls back to compiling the driver.
 - **Database not found or social tables missing:** Run `npm run db:setup` from `Backend\LibraryService` against the same SQL Server instance configured by `DB_SERVER`.
 - **Library API returns `500`:** Check the LibraryService terminal for the underlying error. Verify that it is running and uses the same server/database as AuthService.
 - **Frontend API request or chat connection fails:** Keep all four backend services running, check the Vite proxy targets, and confirm the backend ports.

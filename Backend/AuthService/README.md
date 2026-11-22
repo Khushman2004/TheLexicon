@@ -11,7 +11,7 @@ npm install
 npm start
 ```
 
-By default, the service uses the supplied SQL Express Windows-auth connection (`Server=localhost\SQLEXPRESS;Database=TheLexicon;Trusted_Connection=True;`). The setup command connects to `master` to create the database; the service connects to `TheLexicon`. Configure another server or database with `DB_SERVER` and `DB_NAME`, and choose an installed ODBC driver with `DB_ODBC_DRIVER`. Windows integrated authentication uses the npm-distributed prebuilt `msnodesqlv8` binary; Visual Studio and Docker are not required.
+By default, the service uses the supplied SQL Express Windows-auth connection (`Server=localhost\SQLEXPRESS;Database=TheLexicon;Trusted_Connection=True;`). The setup command connects to `master` to create the database; the service connects to `TheLexicon`. Configure another server or database with `DB_SERVER` and `DB_NAME`, and choose an installed ODBC driver with `DB_ODBC_DRIVER`. Windows integrated authentication uses `msnodesqlv8`. If npm falls back to compiling its native driver, install Visual Studio C++ Build Tools with the **Desktop development with C++** workload; the service pins `node-gyp` for newer Visual Studio versions. Docker is not required.
 
 The service listens on `http://localhost:5000` by default. Set `PORT` to use a different port. For direct browser access from a deployed frontend, set `CORS_ORIGINS` to a comma-separated allowlist of exact frontend origins. Local frontend development uses the Vite proxy.
 
