@@ -692,6 +692,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .entry-actions { opacity: 1; }
 .social-nav { display: grid; gap: 2px; margin-top: 8px; }
 .social-nav .category-nav-item { padding-top: 8px; padding-bottom: 8px; }
+.notification-nav-item { position: relative; }
+.notification-badge { display: inline-flex; min-width: 17px; height: 17px; align-items: center; justify-content: center; margin-left: auto; padding: 0 4px; color: #fff; border-radius: 9px; background: #b35f4f; font-size: 9px; font-weight: 700; }
 .network-tabs { display: flex; gap: 7px; margin: 24px 0 18px; border-bottom: 1px solid var(--line); }
 .network-tabs button {
   display: inline-flex; align-items: center; gap: 7px; padding: 10px 12px;
@@ -732,6 +734,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .network-library-card { display: flex; min-width: 0; flex-direction: column; gap: 8px; }
 .network-library-card > .model-card { flex: 1; }
 .network-library-card > .button { justify-content: center; min-height: 34px; padding: 7px 10px; font-size: 10px; }
+.library-save-button.is-saved { color: #355342; border-color: #b7c9b8; background: #edf3eb; }
+.library-save-button.is-saved:hover { color: #2e4938; border-color: #9eb69f; background: #e4eee2; }
 .network-hint { display: flex; align-items: center; gap: 7px; margin-top: 18px; color: #7e887d; font-size: 10px; }
 .profile-hero { display: flex; align-items: flex-start; gap: 24px; margin: 24px 0; padding: 24px; border: 1px solid #e5e2d9; border-radius: 14px; background: rgba(255,255,255,.55); }
 .profile-avatar { width: 84px; height: 84px; font-family: var(--serif); }
@@ -745,6 +749,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .profile-stats { color: #7d877d; font-size: 10px; }
 .profile-stats span { display: inline-flex; align-items: center; gap: 5px; }
 .profile-stats strong { color: #435849; }
+.profile-stats .profile-stat-link { display: inline-flex; align-items: center; gap: 4px; color: inherit; text-decoration: none; }
+.profile-stats .profile-stat-link:hover { color: #345344; text-decoration: underline; }
 .profile-presence { color: #879087; }
 .profile-presence i { width: 7px; height: 7px; border-radius: 50%; background: #c5c8bf; }
 .profile-presence.online { color: #54845e; }
@@ -758,6 +764,19 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 }
 .profile-visibility-option { display: flex; align-items: center; gap: 8px; color: #647166; font-size: 11px; }
 .profile-visibility-option input { accent-color: #526a57; }
+.notifications-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 20px 0 12px; color: #7d877d; font-size: 11px; }
+.notification-list { display: grid; gap: 8px; }
+.notification-item { display: flex; min-width: 0; align-items: center; gap: 13px; padding: 14px 16px; color: inherit; border: 1px solid #e5e2d9; border-radius: 11px; background: rgba(255,255,255,.55); text-decoration: none; transition: background .16s ease, border-color .16s ease; }
+.notification-item:hover { border-color: #c9d2c4; background: #fffefa; }
+.notification-item.unread { border-color: #d3ddce; background: #f5f7f0; }
+.notification-icon { display: grid; width: 36px; height: 36px; flex: 0 0 auto; place-items: center; color: #526a57; border-radius: 10px; background: #e8ece2; }
+.notification-copy { display: grid; flex: 1; gap: 5px; }
+.notification-copy strong { color: #394b3f; font-size: 11px; font-weight: 600; line-height: 1.5; }
+.notification-copy time { color: #899087; font-size: 9px; }
+.notification-unread-dot { width: 8px; height: 8px; flex: 0 0 auto; border-radius: 50%; background: #648064; }
+.notifications-profile-link { display: inline-flex; align-items: center; gap: 6px; margin-top: 20px; color: #61745f; font-size: 10px; text-decoration: none; }
+.notifications-profile-link:hover { color: #344a40; }
+.connection-card-grid { margin-top: 22px; }
 .shared-heading { margin-top: 34px; }
 .invite-page { display: grid; min-height: 65vh; place-items: center; }
 .invite-card { width: min(590px, 100%); padding: 30px; text-align: center; border: 1px solid #e5e2d9; border-radius: 16px; background: rgba(255,255,255,.58); }

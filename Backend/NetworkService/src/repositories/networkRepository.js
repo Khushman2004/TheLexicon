@@ -105,25 +105,30 @@ export class NetworkRepository {
     return result.recordset.map((row) => row.userId);
   }
 
-  async listConnections(userId, direction) {
+  async listConnections(viewerId, profileId, direction) {
     const followed = direction === "following";
     const join = followed
-      ? "f.FollowedUserId = u.Id AND f.FollowerUserId = @userId"
-      : "f.FollowerUserId = u.Id AND f.FollowedUserId = @userId";
+      ? "f.FollowedUserId = u.Id AND f.FollowerUserId = @profileId"
+      : "f.FollowerUserId = u.Id AND f.FollowedUserId = @profileId";
     const result = await pool.request()
-      .input("userId", sql.Int, userId)
+      .input("viewerId", sql.Int, viewerId)
+      .input("profileId", sql.Int, profileId)
       .query(`
         SELECT ${PROFILE_COLUMNS},
           CAST(CASE WHEN EXISTS (
             SELECT 1 FROM dbo.UserFollows
-            WHERE FollowerUserId = @userId AND FollowedUserId = u.Id
+            WHERE FollowerUserId = @viewerId AND FollowedUserId = u.Id
           ) THEN 1 ELSE 0 END AS bit) AS isFollowing,
           CAST(CASE WHEN EXISTS (
             SELECT 1 FROM dbo.UserFollows
-            WHERE FollowerUserId = u.Id AND FollowedUserId = @userId
+            WHERE FollowerUserId = u.Id AND FollowedUserId = @viewerId
           ) THEN 1 ELSE 0 END AS bit) AS followsViewer
         FROM dbo.Users AS u
         INNER JOIN dbo.UserFollows AS f ON ${join}
+        WHERE u.Id = @viewerId OR u.IsPublic = 1 OR EXISTS (
+          SELECT 1 FROM dbo.UserFollows
+          WHERE FollowerUserId = @viewerId AND FollowedUserId = u.Id
+        )
         ORDER BY u.Username;`);
     return result.recordset;
   }
@@ -136,14 +141,32 @@ export class NetworkRepository {
   }
 
   async follow(followerId, followedId) {
-    const result = await pool.request()
-      .input("followerId", sql.Int, followerId)
-      .input("followedId", sql.Int, followedId)
-      .query(`
-        IF NOT EXISTS (SELECT 1 FROM dbo.UserFollows WHERE FollowerUserId = @followerId AND FollowedUserId = @followedId)
-          INSERT INTO dbo.UserFollows (FollowerUserId, FollowedUserId) VALUES (@followerId, @followedId);
-        SELECT CAST(1 AS bit) AS isFollowing;`);
-    return result.recordset[0];
+    const transaction = new sql.Transaction(pool);
+    await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+    try {
+      const request = new sql.Request(transaction)
+        .input("followerId", sql.Int, followerId)
+        .input("followedId", sql.Int, followedId);
+      const existing = await request.query(`
+        SELECT FollowerUserId
+        FROM dbo.UserFollows WITH (UPDLOCK, HOLDLOCK)
+        WHERE FollowerUserId = @followerId AND FollowedUserId = @followedId;`);
+      if (!existing.recordset.length) {
+        await new sql.Request(transaction)
+          .input("followerId", sql.Int, followerId)
+          .input("followedId", sql.Int, followedId)
+          .query(`
+            INSERT INTO dbo.UserFollows (FollowerUserId, FollowedUserId)
+            VALUES (@followerId, @followedId);
+            INSERT INTO dbo.Notifications (RecipientUserId, ActorUserId, Type)
+            VALUES (@followedId, @followerId, N'FOLLOW');`);
+      }
+      await transaction.commit();
+      return { isFollowing: true };
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
   }
 
   async unfollow(followerId, followedId) {
@@ -151,6 +174,54 @@ export class NetworkRepository {
       .input("followerId", sql.Int, followerId)
       .input("followedId", sql.Int, followedId)
       .query("DELETE FROM dbo.UserFollows WHERE FollowerUserId = @followerId AND FollowedUserId = @followedId;");
+  }
+
+  async listNotifications(userId) {
+    const result = await pool.request()
+      .input("userId", sql.Int, userId)
+      .query(`
+        SELECT TOP (100) n.Id AS id, n.Type AS type, n.LibraryId AS libraryId,
+          n.AccessRequestId AS accessRequestId, n.ConversationId AS conversationId,
+          n.CreatedAt AS createdAt, n.ReadAt AS readAt,
+          u.Id AS actorId, u.Username AS actorUsername, u.FullName AS actorName,
+          l.Name AS libraryName
+        FROM dbo.Notifications AS n
+        INNER JOIN dbo.Users AS u ON u.Id = n.ActorUserId
+        LEFT JOIN dbo.Libraries AS l ON l.Id = n.LibraryId
+        WHERE n.RecipientUserId = @userId
+        ORDER BY n.CreatedAt DESC, n.Id DESC;
+
+        SELECT COUNT(*) AS unreadCount
+        FROM dbo.Notifications
+        WHERE RecipientUserId = @userId AND ReadAt IS NULL;`);
+    return {
+      notifications: result.recordsets[0],
+      unreadCount: result.recordsets[1][0].unreadCount,
+    };
+  }
+
+  async markNotificationRead(userId, notificationId) {
+    const result = await pool.request()
+      .input("userId", sql.Int, userId)
+      .input("notificationId", sql.Int, notificationId)
+      .query(`
+        UPDATE dbo.Notifications
+        SET ReadAt = COALESCE(ReadAt, SYSDATETIMEOFFSET())
+        WHERE Id = @notificationId AND RecipientUserId = @userId;
+        SELECT CAST(CASE WHEN EXISTS (
+          SELECT 1 FROM dbo.Notifications
+          WHERE Id = @notificationId AND RecipientUserId = @userId
+        ) THEN 1 ELSE 0 END AS bit) AS existsForUser;`);
+    return result.recordset[0].existsForUser;
+  }
+
+  async markAllNotificationsRead(userId) {
+    await pool.request()
+      .input("userId", sql.Int, userId)
+      .query(`
+        UPDATE dbo.Notifications
+        SET ReadAt = SYSDATETIMEOFFSET()
+        WHERE RecipientUserId = @userId AND ReadAt IS NULL;`);
   }
 
   async listPublicLibraries(viewerId, ownerId = null) {
@@ -220,26 +291,47 @@ export class NetworkRepository {
   }
 
   async saveLibrary(userId, libraryId) {
-    const result = await pool.request()
-      .input("userId", sql.Int, userId)
-      .input("libraryId", sql.Int, libraryId)
-      .query(`
-        IF NOT EXISTS (
-          SELECT 1 FROM dbo.Libraries AS l
+    const transaction = new sql.Transaction(pool);
+    await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+    try {
+      const accessible = await new sql.Request(transaction)
+        .input("userId", sql.Int, userId)
+        .input("libraryId", sql.Int, libraryId)
+        .query(`
+          SELECT l.Id AS id
+          FROM dbo.Libraries AS l WITH (UPDLOCK, HOLDLOCK)
           WHERE l.Id = @libraryId
             AND (l.IsPublic = 1 OR EXISTS (
-              SELECT 1 FROM dbo.LibraryAccessGrants
+              SELECT 1 FROM dbo.LibraryAccessGrants WITH (UPDLOCK, HOLDLOCK)
               WHERE LibraryId = l.Id AND UserId = @userId
-            ))
-        )
-          SELECT CAST(0 AS bit) AS saved;
-        ELSE
-        BEGIN
-          IF NOT EXISTS (SELECT 1 FROM dbo.SavedLibraries WHERE UserId = @userId AND LibraryId = @libraryId)
-            INSERT INTO dbo.SavedLibraries (UserId, LibraryId) VALUES (@userId, @libraryId);
-          SELECT CAST(1 AS bit) AS saved;
-        END;`);
-    return result.recordset[0].saved;
+            ));`);
+      if (!accessible.recordset.length) {
+        await transaction.rollback();
+        return false;
+      }
+
+      const existing = await new sql.Request(transaction)
+        .input("userId", sql.Int, userId)
+        .input("libraryId", sql.Int, libraryId)
+        .query(`
+          SELECT UserId
+          FROM dbo.SavedLibraries WITH (UPDLOCK, HOLDLOCK)
+          WHERE UserId = @userId AND LibraryId = @libraryId;`);
+      if (!existing.recordset.length) {
+        await new sql.Request(transaction)
+          .input("userId", sql.Int, userId)
+          .input("libraryId", sql.Int, libraryId)
+          .query(`
+            INSERT INTO dbo.SavedLibraries (UserId, LibraryId)
+            VALUES (@userId, @libraryId);`);
+      }
+
+      await transaction.commit();
+      return true;
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
   }
 
   async unsaveLibrary(userId, libraryId) {
@@ -349,6 +441,16 @@ export class NetworkRepository {
           INSERT INTO dbo.LibraryAccessRequests (InviteId, RequesterUserId)
           OUTPUT INSERTED.Id AS id, INSERTED.Status AS status
           VALUES (@inviteId, @requesterId);`);
+      await new sql.Request(transaction)
+        .input("ownerId", sql.Int, invite.ownerId)
+        .input("requesterId", sql.Int, userId)
+        .input("libraryId", sql.Int, invite.libraryId)
+        .input("requestId", sql.Int, inserted.recordset[0].id)
+        .query(`
+          INSERT INTO dbo.Notifications
+            (RecipientUserId, ActorUserId, Type, LibraryId, AccessRequestId)
+          VALUES
+            (@ownerId, @requesterId, N'LIBRARY_ACCESS_REQUEST', @libraryId, @requestId);`);
       await transaction.commit();
       return { ...inserted.recordset[0], alreadyRequested: false };
     } catch (error) {
@@ -411,6 +513,19 @@ export class NetworkRepository {
               INSERT INTO dbo.LibraryAccessGrants (LibraryId, UserId, GrantedByUserId)
               VALUES (@libraryId, @requesterId, @userId);`);
       }
+      await new sql.Request(transaction)
+        .input("requesterId", sql.Int, resolved.requesterId)
+        .input("userId", sql.Int, userId)
+        .input("libraryId", sql.Int, resolved.libraryId)
+        .input("requestId", sql.Int, requestId)
+        .input("type", sql.NVarChar(32), status === "APPROVED"
+          ? "LIBRARY_ACCESS_APPROVED"
+          : "LIBRARY_ACCESS_DECLINED")
+        .query(`
+          INSERT INTO dbo.Notifications
+            (RecipientUserId, ActorUserId, Type, LibraryId, AccessRequestId)
+          VALUES
+            (@requesterId, @userId, @type, @libraryId, @requestId);`);
       await transaction.commit();
       return { ...resolved, status };
     } catch (error) {

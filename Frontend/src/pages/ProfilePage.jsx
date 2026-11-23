@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { io } from "socket.io-client";
-import { ArrowRight, Bookmark, MessageCircle, Save, Shield, UserRound, Users } from "lucide-react";
+import { ArrowRight, Bookmark, Check, MessageCircle, Save, Shield, UserRound, Users } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { getChatSocketUrl, networkApi } from "../api.js";
 import { EmptyPage, PageTitle } from "./WorkspaceComponents.jsx";
@@ -109,11 +109,12 @@ export default function ProfilePage({ token, currentUserId, onProfileUpdated }) 
   async function toggleSave(library) {
     setSaving(true);
     setError("");
+    const shouldSave = !library.isSaved;
     try {
-      if (library.isSaved) await networkApi.unsaveLibrary(token, library.id);
-      else await networkApi.saveLibrary(token, library.id);
+      if (shouldSave) await networkApi.saveLibrary(token, library.id);
+      else await networkApi.unsaveLibrary(token, library.id);
       setLibraries((current) => current.map((item) => item.id === library.id
-        ? { ...item, isSaved: !library.isSaved }
+        ? { ...item, isSaved: shouldSave }
         : item));
     } catch (requestError) {
       setError(requestError.message);
@@ -138,8 +139,8 @@ export default function ProfilePage({ token, currentUserId, onProfileUpdated }) 
           <div className="profile-identity"><h2>{profile.fullName || profile.username}</h2><span>@{profile.username}</span></div>
           <p>{profile.bio || (isSelf ? "Add a short introduction to your profile." : "This reader hasn't added a bio yet.")}</p>
           <div className="profile-stats">
-            <span><strong>{profile.followerCount}</strong> followers</span>
-            <span><strong>{profile.followingCount}</strong> following</span>
+            <Link className="profile-stat-link" to={`/connections/${profile.id}/followers`}><strong>{profile.followerCount}</strong> followers</Link>
+            <Link className="profile-stat-link" to={`/connections/${profile.id}/following`}><strong>{profile.followingCount}</strong> following</Link>
             <span><Shield size={14} /> {profile.isPublic ? "Public profile" : "Private profile"}</span>
             {!isSelf && profile.isMutual && <span className={`profile-presence ${isOnline ? "online" : ""}`}><i />{isOnline ? "Online now" : "Offline"}</span>}
           </div>
@@ -177,14 +178,25 @@ export default function ProfilePage({ token, currentUserId, onProfileUpdated }) 
                 <span className="model-card-description">{library.publicModelCount} public {library.publicModelCount === 1 ? "model" : "models"}</span>
                 <span className="model-card-link">Browse library <ArrowRight size={14} /></span>
               </Link>
-              <button className="button button-outline" disabled={saving} onClick={() => toggleSave(library)}>
-                <Bookmark size={14} /> {library.isSaved ? "Saved" : "Save library"}
+              <button
+                className={`button button-outline library-save-button ${library.isSaved ? "is-saved" : ""}`}
+                aria-pressed={Boolean(library.isSaved)}
+                disabled={saving}
+                onClick={() => toggleSave(library)}
+              >
+                {library.isSaved ? <Check size={14} /> : <Bookmark size={14} />}
+                {library.isSaved ? "Saved" : "Save library"}
               </button>
             </article>
           ))}
         </div>
       ) : (
-        <EmptyPage title="No public libraries to show." description={isSelf ? "Make one of your libraries public so other readers can discover it." : "This reader has not shared a public library."} />
+        <EmptyPage
+          title="No public libraries to show."
+          description={isSelf
+            ? "To share a shelf, make its library and at least one model public. Your profile must also be public for it to appear in discovery."
+            : "This reader has not shared a public library and model on a public profile."}
+        />
       )}
     </div>
   );

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   BookMarked,
+  Bell,
   Bookmark,
   Check,
   Users,
@@ -15,7 +16,7 @@ import {
   X,
 } from "lucide-react";
 import { BrowserRouter, Link, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
-import { ApiError, authApi, libraryApi } from "./api.js";
+import { ApiError, authApi, libraryApi, networkApi } from "./api.js";
 import { MODEL_PAGES } from "./catalog.js";
 import AuthPage from "./components/AuthPage.jsx";
 import EntryDialog from "./components/EntryDialog.jsx";
@@ -32,6 +33,8 @@ import ProfilePage from "./pages/ProfilePage.jsx";
 import SavedLibrariesPage from "./pages/SavedLibrariesPage.jsx";
 import LibraryInvitePage from "./pages/LibraryInvitePage.jsx";
 import ChatPage from "./pages/ChatPage.jsx";
+import ConnectionsPage from "./pages/ConnectionsPage.jsx";
+import NotificationsPage from "./pages/NotificationsPage.jsx";
 
 const TOKEN_KEY = "the-lexicon-token";
 
@@ -58,6 +61,7 @@ function AppSession() {
   const [toast, setToast] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
   const libraryId = location.pathname.match(/^\/libraries\/(\d+)/)?.[1] ?? null;
   const activeLibrary = libraries.find((library) => String(library.id) === libraryId) ?? null;
 
@@ -119,6 +123,32 @@ function AppSession() {
     const timer = window.setTimeout(() => setToast(""), 3200);
     return () => window.clearTimeout(timer);
   }, [toast]);
+
+  useEffect(() => {
+    if (!token) {
+      setUnreadNotifications(0);
+      return undefined;
+    }
+
+    let active = true;
+    const refreshUnreadCount = async () => {
+      try {
+        const result = await networkApi.getNotifications(token);
+        if (active) setUnreadNotifications(result.unreadCount);
+      } catch (error) {
+        if (active) console.error("Could not refresh notification count:", error);
+      }
+    };
+
+    refreshUnreadCount();
+    const interval = window.setInterval(refreshUnreadCount, 30000);
+    window.addEventListener("focus", refreshUnreadCount);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+      window.removeEventListener("focus", refreshUnreadCount);
+    };
+  }, [token, location.pathname]);
 
   async function handleAuthenticate(mode, details) {
     const result = mode === "register"
@@ -228,6 +258,10 @@ function AppSession() {
             <Link className={`category-nav-item ${location.pathname === "/network" ? "selected" : ""}`} to="/network" onClick={() => setMobileNavOpen(false)}><Users size={16} /><span>People & libraries</span></Link>
             <Link className={`category-nav-item ${location.pathname === "/saved" ? "selected" : ""}`} to="/saved" onClick={() => setMobileNavOpen(false)}><Bookmark size={16} /><span>Saved shelves</span></Link>
             <Link className={`category-nav-item ${location.pathname.startsWith("/messages") ? "selected" : ""}`} to="/messages" onClick={() => setMobileNavOpen(false)}><MessageCircle size={16} /><span>Messages</span></Link>
+            <Link className={`category-nav-item notification-nav-item ${location.pathname.startsWith("/notifications") ? "selected" : ""}`} to="/notifications" onClick={() => setMobileNavOpen(false)}>
+              <Bell size={16} /><span>Notifications</span>
+              {unreadNotifications > 0 && <span className="notification-badge">{unreadNotifications > 99 ? "99+" : unreadNotifications}</span>}
+            </Link>
             <Link className={`category-nav-item ${location.pathname.startsWith("/profile") ? "selected" : ""}`} to="/profile" onClick={() => setMobileNavOpen(false)}><UserRound size={16} /><span>Your profile</span></Link>
           </nav>
           <div className="library-list">
@@ -315,9 +349,11 @@ function AppSession() {
         <Routes>
           <Route path="/libraries" element={<LibrariesPage libraries={libraries} loading={loadingLibraries} onCreate={() => setDialog({ type: "library" })} />} />
           <Route path="/network" element={<NetworkPage token={token} />} />
+          <Route path="/notifications" element={<NotificationsPage token={token} onUnreadCountChange={setUnreadNotifications} />} />
           <Route path="/saved" element={<SavedLibrariesPage token={token} />} />
           <Route path="/profile" element={<ProfilePage token={token} currentUserId={user.id} onProfileUpdated={(profile) => setUser((current) => ({ ...current, ...profile }))} />} />
           <Route path="/profiles/:userId" element={<ProfilePage token={token} currentUserId={user.id} onProfileUpdated={(profile) => setUser((current) => ({ ...current, ...profile }))} />} />
+          <Route path="/connections/:userId/:direction" element={<ConnectionsPage token={token} currentUserId={user.id} />} />
           <Route path="/share/:shareToken" element={<LibraryInvitePage token={token} />} />
           <Route path="/messages/new/:recipientId" element={<ChatPage token={token} currentUserId={user.id} />} />
           <Route path="/messages/:conversationId?" element={<ChatPage token={token} currentUserId={user.id} />} />

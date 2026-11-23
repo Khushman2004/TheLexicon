@@ -47,7 +47,20 @@ npm run db:setup
 
 The setup uses the current `DB_SERVER` and `DB_NAME` settings, creates or updates the database, preserves existing data, and is safe to rerun. SQL Server Management Studio is not required.
 
-### 2. Start AuthService
+### 2. Start all backend services
+
+After installing dependencies in each service folder, start all four services from PowerShell:
+
+```powershell
+cd D:\Lexicon\TheLexicon
+.\Backend\start-all.ps1
+```
+
+The script opens a separate terminal for AuthService, LibraryService, NetworkService, and ChatService so each service's output remains visible. Close each terminal window to stop its service. To set a non-default SQL Server instance, set `$env:DB_SERVER` in the same PowerShell window before running the script.
+
+To start services individually instead, use the commands below.
+
+### 3. Start AuthService
 
 Open a PowerShell terminal:
 
@@ -59,7 +72,7 @@ npm start
 
 It listens at `http://localhost:5000` by default. Keep this terminal open.
 
-### 3. Start LibraryService
+### 4. Start LibraryService
 
 Open a **second** PowerShell terminal:
 
@@ -71,7 +84,7 @@ npm start
 
 It listens at `http://localhost:5001` by default. Keep this terminal open too.
 
-### 4. Start NetworkService
+### 5. Start NetworkService
 
 Open another PowerShell terminal:
 
@@ -83,7 +96,7 @@ npm start
 
 It listens at `http://localhost:5002` by default. It provides profiles, follows, saved public libraries, private-library access requests, and owner approvals.
 
-### 5. Start ChatService
+### 6. Start ChatService
 
 Open another PowerShell terminal:
 
@@ -104,7 +117,7 @@ npm start
 
 The environment variable applies only to that terminal session. NetworkService and ChatService reuse LibraryService's shared SQL adapter and do not install duplicate native SQL drivers.
 
-### 6. Start the frontend
+### 7. Start the frontend
 
 Open another PowerShell terminal:
 
@@ -116,7 +129,7 @@ npm run dev
 
 Open the Vite URL shown in the terminal (normally `http://localhost:5173`). Vite proxies REST requests to all four services and `/socket.io` to ChatService.
 
-### 7. Create an account and sign in
+### 8. Create an account and sign in
 
 Choose **Create account** in the app and enter a username, email, and password. Usernames must be 3–32 letters, numbers, or underscores; passwords must be 8–128 characters. Then sign in with that email and password. There is no preconfigured default account.
 
@@ -182,6 +195,9 @@ The main frontend routes are:
 | `/libraries/:libraryId/reading-spaces/:spaceId/sections/:sectionId` | Entries in a reading-space section |
 | `/network` | Search readers, follow them, discover public libraries |
 | `/profiles/:userId` | View a reader profile and public shelves |
+| `/connections/:userId/followers` | View a profile's followers |
+| `/connections/:userId/following` | View who a profile follows |
+| `/notifications` | Review follows, private-library access requests/decisions, and incoming messages |
 | `/saved` | View saved public libraries and approved private shares |
 | `/share/:token` | Request owner-approved access to a private library |
 | `/messages` | Live conversations with mutual followers |
@@ -216,7 +232,7 @@ LibraryService (`http://localhost:5001`):
 | `GET` | `/api/libraries/shared/:libraryId` | Read a public or owner-approved shared library |
 | `GET` | `/api/libraries/shared/:libraryId/models/:modelKey/entries` | Read a public or explicitly shared model |
 
-NetworkService (`http://localhost:5002`) provides authenticated profile editing/search, follows, public library discovery and saving, and private-library invitations that require owner approval. ChatService (`http://localhost:5003`) provides authenticated conversation history and mutual-follower-only Socket.IO messages and online presence. Their complete endpoint and event contracts are in the linked service READMEs below.
+NetworkService (`http://localhost:5002`) provides authenticated profile editing/search, follows, public library discovery and saving, owner-approved private-library invitations, and notifications. ChatService (`http://localhost:5003`) provides authenticated conversation history and mutual-follower-only Socket.IO messages and online presence; incoming messages create notifications. Their complete endpoint and event contracts are in the linked service READMEs below.
 
 Except for `/health`, authenticated endpoints across LibraryService, NetworkService, and ChatService require `Authorization: Bearer <token>`; Socket.IO uses the same token in its handshake auth object. See the service READMEs for endpoint details and example payloads:
 

@@ -50,4 +50,4 @@ const socket = io("http://localhost:5003", { auth: { token } });
 - `sendMessage`: send `{ conversationId, body }`; the acknowledgement returns `{ ok, message }` or `{ ok: false, error }`.
 - `newMessage`: server broadcasts the persisted message to both participants.
 
-Messages are limited to 4,000 characters, stored in `dbo.ChatMessages`, and history is paginated with 50 messages per request. `Db/TheLexicon.sql` creates the conversation and message tables idempotently.
+Messages are limited to 4,000 characters, stored in `dbo.ChatMessages`, and history is paginated with 50 messages per request. Each incoming message also creates an unread notification for its recipient in `dbo.Notifications`. `Db/TheLexicon.sql` creates the conversation, message, and notification tables idempotently.

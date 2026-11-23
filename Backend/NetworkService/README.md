@@ -33,14 +33,17 @@ All paths are prefixed with `/api/network`.
 | Method | Path | Purpose |
 | --- | --- | --- |
 | GET, PATCH | `/profile` | Get or update your profile |
+| GET | `/notifications` | List the latest 100 notifications and unread count |
+| PATCH | `/notifications/:notificationId/read` | Mark one notification as read |
+| PATCH | `/notifications/read-all` | Mark all notifications as read |
 | GET | `/users?search=<term>` | Search public profiles |
 | GET | `/users/:userId` | View a profile and its public libraries |
 | POST, DELETE | `/users/:userId/follow` | Follow or unfollow a public profile |
-| GET | `/connections/followers` or `/connections/following` | List your connections |
+| GET | `/connections/followers` or `/connections/following` | List your connections; optional `?userId=<id>` lists a visible profile's connections |
 | GET | `/libraries/discover` | Discover public libraries |
 | GET | `/libraries/saved` | List saved public libraries |
 | GET | `/libraries/shared` | List private libraries shared with you |
-| POST, DELETE | `/libraries/:libraryId/save` | Save or unsave a visible library |
+| POST, DELETE | `/libraries/:libraryId/save` | Save or unsave a visible library; POST responds with `{ "saved": true }` |
 | GET, POST | `/libraries/:libraryId/invites` | List or create private library invites (owner) |
 | DELETE | `/libraries/:libraryId/invites/:inviteId` | Revoke an invite (owner) |
 | GET | `/invitations/:token` | View a valid invite |
@@ -63,4 +66,4 @@ Content-Type: application/json
 
 ## Data
 
-The rerunnable `Db/TheLexicon.sql` script creates `UserFollows`, `SavedLibraries`, `LibraryInvites`, `LibraryAccessRequests`, and `LibraryAccessGrants`. It preserves existing data. The service does not store raw session tokens or invite tokens.
+Notifications are recorded for new followers, private-library access requests and decisions, and incoming chat messages. The rerunnable `Db/TheLexicon.sql` script creates `Notifications` alongside `UserFollows`, `SavedLibraries`, `LibraryInvites`, `LibraryAccessRequests`, and `LibraryAccessGrants`. It preserves existing data. The service does not store raw session tokens or invite tokens.

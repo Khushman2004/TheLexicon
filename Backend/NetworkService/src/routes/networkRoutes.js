@@ -15,6 +15,21 @@ export function createNetworkRoutes(authenticationService, networkService) {
   router.patch("/profile", async (request, response) => {
     response.json({ profile: await networkService.updateProfile(request.userId, request.body) });
   });
+  router.get("/notifications", async (request, response) => {
+    response.json(await networkService.listNotifications(request.userId));
+  });
+  router.patch("/notifications/read-all", async (request, response) => {
+    await networkService.markAllNotificationsRead(request.userId);
+    response.status(204).end();
+  });
+  router.patch("/notifications/:notificationId/read", async (request, response) => {
+    const updated = await networkService.markNotificationRead(
+      request.userId,
+      request.params.notificationId,
+    );
+    if (!updated) throw new HttpError(404, "Unread notification not found.");
+    response.status(204).end();
+  });
   router.get("/users", async (request, response) => {
     response.json({ users: await networkService.searchUsers(request.userId, request.query.search) });
   });
@@ -29,7 +44,13 @@ export function createNetworkRoutes(authenticationService, networkService) {
     response.status(204).end();
   });
   router.get("/connections/:direction", async (request, response) => {
-    response.json({ users: await networkService.listConnections(request.userId, request.params.direction) });
+    response.json({
+      users: await networkService.listConnections(
+        request.userId,
+        request.params.direction,
+        request.query.userId,
+      ),
+    });
   });
 
   router.get("/libraries/discover", async (request, response) => {
@@ -43,7 +64,7 @@ export function createNetworkRoutes(authenticationService, networkService) {
   });
   router.post("/libraries/:libraryId/save", async (request, response) => {
     await networkService.saveLibrary(request.userId, request.params.libraryId);
-    response.status(204).end();
+    response.json({ saved: true });
   });
   router.delete("/libraries/:libraryId/save", async (request, response) => {
     await networkService.unsaveLibrary(request.userId, request.params.libraryId);

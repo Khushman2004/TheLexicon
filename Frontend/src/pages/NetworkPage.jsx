@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowRight, Bookmark, Compass, Search, UserRound, Users } from "lucide-react";
+import { ArrowRight, Bookmark, Check, Compass, Search, UserRound, Users } from "lucide-react";
 import { Link } from "react-router-dom";
 import { networkApi } from "../api.js";
 import { EmptyPage, PageTitle } from "./WorkspaceComponents.jsx";
@@ -75,11 +75,12 @@ export default function NetworkPage({ token }) {
   async function toggleSave(library) {
     setSavingId(`library-${library.id}`);
     setError("");
+    const shouldSave = !library.isSaved;
     try {
-      if (library.isSaved) await networkApi.unsaveLibrary(token, library.id);
-      else await networkApi.saveLibrary(token, library.id);
+      if (shouldSave) await networkApi.saveLibrary(token, library.id);
+      else await networkApi.unsaveLibrary(token, library.id);
       setLibraries((current) => current.map((item) => item.id === library.id
-        ? { ...item, isSaved: !library.isSaved }
+        ? { ...item, isSaved: shouldSave }
         : item));
     } catch (requestError) {
       setError(requestError.message);
@@ -126,7 +127,7 @@ export default function NetworkPage({ token }) {
             <EmptyPage
               title={hasSearched ? "No people found." : "Your network starts here."}
               description={hasSearched
-                ? "Search excludes your own profile. Try another person's username or full name; email addresses aren't searchable."
+                ? "Search finds other public profiles by username or full name. Your own profile, private profiles, and email addresses won't appear."
                 : "Search for a reader to follow and see their public libraries."}
             />
           )}
@@ -144,14 +145,23 @@ export default function NetworkPage({ token }) {
                     <span className="model-card-description">By {library.ownerName || library.ownerUsername} · {library.publicModelCount} public {library.publicModelCount === 1 ? "model" : "models"}</span>
                     <span className="model-card-link">Explore library <ArrowRight size={14} /></span>
                   </Link>
-                  <button className="button button-outline" disabled={savingId === `library-${library.id}`} onClick={() => toggleSave(library)}>
-                    <Bookmark size={14} /> {library.isSaved ? "Saved" : "Save library"}
+                  <button
+                    className={`button button-outline library-save-button ${library.isSaved ? "is-saved" : ""}`}
+                    aria-pressed={Boolean(library.isSaved)}
+                    disabled={savingId === `library-${library.id}`}
+                    onClick={() => toggleSave(library)}
+                  >
+                    {library.isSaved ? <Check size={14} /> : <Bookmark size={14} />}
+                    {library.isSaved ? "Saved" : "Save library"}
                   </button>
                 </article>
               ))}
             </div>
           ) : (
-            <EmptyPage title="No shared libraries yet." description="Public libraries from your network will show up here." />
+            <EmptyPage
+              title="No shared libraries yet."
+              description="Discovery shows other readers' public profiles' libraries only when the library and at least one model are public. Your own public shelves are on Your profile."
+            />
           )}
         </>
       )}

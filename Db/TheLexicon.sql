@@ -469,6 +469,44 @@ BEGIN
 END;
 GO
 
+IF OBJECT_ID(N'dbo.Notifications', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.Notifications
+    (
+        Id INT IDENTITY(1,1) NOT NULL,
+        RecipientUserId INT NOT NULL,
+        ActorUserId INT NOT NULL,
+        Type NVARCHAR(32) NOT NULL,
+        LibraryId INT NULL,
+        AccessRequestId INT NULL,
+        ConversationId INT NULL,
+        CreatedAt DATETIMEOFFSET(7) NOT NULL
+            CONSTRAINT DF_Notifications_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        ReadAt DATETIMEOFFSET(7) NULL,
+        CONSTRAINT PK_Notifications PRIMARY KEY CLUSTERED (Id),
+        CONSTRAINT FK_Notifications_Recipient FOREIGN KEY (RecipientUserId)
+            REFERENCES dbo.Users (Id),
+        CONSTRAINT FK_Notifications_Actor FOREIGN KEY (ActorUserId)
+            REFERENCES dbo.Users (Id),
+        CONSTRAINT CK_Notifications_Type CHECK
+            (Type IN (N'FOLLOW', N'LIBRARY_ACCESS_REQUEST', N'LIBRARY_ACCESS_APPROVED',
+                      N'LIBRARY_ACCESS_DECLINED', N'CHAT_MESSAGE'))
+    );
+END;
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1 FROM sys.indexes
+    WHERE object_id = OBJECT_ID(N'dbo.Notifications')
+      AND name = N'IX_Notifications_Recipient_Read_Created'
+)
+BEGIN
+    CREATE INDEX IX_Notifications_Recipient_Read_Created
+        ON dbo.Notifications (RecipientUserId, ReadAt, CreatedAt DESC);
+END;
+GO
+
 /*
     Entries cover the five library models: words; phrases/idioms; reading
     spaces; poetry; and research. Reading spaces have default section entries.

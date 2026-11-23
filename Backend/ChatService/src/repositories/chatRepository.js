@@ -191,6 +191,18 @@ export class ChatRepository {
       await new sql.Request(transaction)
         .input("conversationId", sql.Int, conversationId)
         .query("UPDATE dbo.ChatConversations SET LastMessageAt = SYSDATETIMEOFFSET() WHERE Id = @conversationId;");
+      const recipientId = conversation.userOneId === userId
+        ? conversation.userTwoId
+        : conversation.userOneId;
+      await new sql.Request(transaction)
+        .input("recipientId", sql.Int, recipientId)
+        .input("senderId", sql.Int, userId)
+        .input("conversationId", sql.Int, conversationId)
+        .query(`
+          INSERT INTO dbo.Notifications
+            (RecipientUserId, ActorUserId, Type, ConversationId)
+          VALUES
+            (@recipientId, @senderId, N'CHAT_MESSAGE', @conversationId);`);
       await transaction.commit();
       return {
         ...inserted.recordset[0],

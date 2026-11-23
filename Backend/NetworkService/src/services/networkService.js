@@ -47,11 +47,30 @@ export class NetworkService {
     return { profile, libraries };
   }
 
-  async listConnections(userId, direction) {
+  async listConnections(userId, direction, profileId = userId) {
     if (!["followers", "following"].includes(direction)) {
       throw new HttpError(400, "Connection type must be followers or following.");
     }
-    return this.repository.listConnections(userId, direction);
+    const targetId = readId(profileId, "userId");
+    if (!(await this.repository.getProfile(userId, targetId))) {
+      throw new HttpError(404, "Profile not found.");
+    }
+    return this.repository.listConnections(userId, targetId, direction);
+  }
+
+  async listNotifications(userId) {
+    return this.repository.listNotifications(userId);
+  }
+
+  async markNotificationRead(userId, notificationId) {
+    return this.repository.markNotificationRead(
+      userId,
+      readId(notificationId, "notificationId"),
+    );
+  }
+
+  async markAllNotificationsRead(userId) {
+    await this.repository.markAllNotificationsRead(userId);
   }
 
   async follow(userId, targetId) {

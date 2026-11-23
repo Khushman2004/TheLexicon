@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowRight, Bookmark, BookOpen, Compass } from "lucide-react";
+import { ArrowRight, Bookmark, BookOpen, Check, Compass } from "lucide-react";
 import { Link } from "react-router-dom";
 import { networkApi } from "../api.js";
 import { EmptyPage, PageTitle } from "./WorkspaceComponents.jsx";
@@ -24,11 +24,12 @@ export default function PublicLibrariesPage({ token }) {
   async function toggleSave(library) {
     setSavingId(library.id);
     setError("");
+    const shouldSave = !library.isSaved;
     try {
-      if (library.isSaved) await networkApi.unsaveLibrary(token, library.id);
-      else await networkApi.saveLibrary(token, library.id);
+      if (shouldSave) await networkApi.saveLibrary(token, library.id);
+      else await networkApi.unsaveLibrary(token, library.id);
       setLibraries((current) => current.map((item) => item.id === library.id
-        ? { ...item, isSaved: !library.isSaved }
+        ? { ...item, isSaved: shouldSave }
         : item));
     } catch (requestError) {
       setError(requestError.message);
@@ -59,8 +60,14 @@ export default function PublicLibrariesPage({ token }) {
                 </span>
                 <span className="model-card-link">Browse library <ArrowRight size={14} /></span>
               </Link>
-              <button className="button button-outline" disabled={savingId === library.id} onClick={() => toggleSave(library)}>
-                <Bookmark size={14} /> {library.isSaved ? "Saved" : "Save library"}
+              <button
+                className={`button button-outline library-save-button ${library.isSaved ? "is-saved" : ""}`}
+                aria-pressed={Boolean(library.isSaved)}
+                disabled={savingId === library.id}
+                onClick={() => toggleSave(library)}
+              >
+                {library.isSaved ? <Check size={14} /> : <Bookmark size={14} />}
+                {library.isSaved ? "Saved" : "Save library"}
               </button>
             </article>
           ))}
@@ -68,7 +75,7 @@ export default function PublicLibrariesPage({ token }) {
       ) : (
         <EmptyPage
           title="No public libraries yet."
-          description="When other readers share a public library, you will find it here."
+          description="This page lists other readers' libraries only when their profile, library, and at least one model are public. Your own public shelves are on Your profile."
         />
       )}
       <div className="discover-footnote"><Compass size={15} /> Public libraries and models can only be viewed by signed-in users.</div>

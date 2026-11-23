@@ -29,7 +29,7 @@ async function request(base, path, { token, ...options } = {}) {
       },
     });
   } catch {
-    throw new Error("Could not reach the service. Check that both backend services are running.");
+    throw new Error("Could not reach the service. Check that the required backend service is running.");
   }
 
   if (response.status === 204) return null;
@@ -181,11 +181,14 @@ export const networkApi = {
     token,
     ...jsonBody(updates),
   }),
-  searchUsers: (token, search) => request(
-    networkBase,
-    `/api/network/users?search=${encodeURIComponent(search)}`,
-    { token },
-  ),
+  searchUsers: async (token, search) => {
+    const result = await request(
+      networkBase,
+      `/api/network/users?search=${encodeURIComponent(search)}`,
+      { token },
+    );
+    return result.users;
+  },
   getUser: (token, userId) => request(networkBase, `/api/network/users/${userId}`, { token }),
   follow: (token, userId) => request(networkBase, `/api/network/users/${userId}/follow`, {
     method: "POST",
@@ -195,10 +198,26 @@ export const networkApi = {
     method: "DELETE",
     token,
   }),
-  connections: async (token, direction) => {
-    const result = await request(networkBase, `/api/network/connections/${direction}`, { token });
+  connections: async (token, direction, userId) => {
+    const query = userId ? `?userId=${encodeURIComponent(userId)}` : "";
+    const result = await request(
+      networkBase,
+      `/api/network/connections/${direction}${query}`,
+      { token },
+    );
     return result.users;
   },
+  getNotifications: (token) => request(networkBase, "/api/network/notifications", { token }),
+  markNotificationRead: (token, notificationId) => request(
+    networkBase,
+    `/api/network/notifications/${notificationId}/read`,
+    { method: "PATCH", token },
+  ),
+  markAllNotificationsRead: (token) => request(
+    networkBase,
+    "/api/network/notifications/read-all",
+    { method: "PATCH", token },
+  ),
   discoverLibraries: async (token, ownerId) => {
     const query = ownerId ? `?ownerId=${encodeURIComponent(ownerId)}` : "";
     const result = await request(networkBase, `/api/network/libraries/discover${query}`, { token });
@@ -212,10 +231,15 @@ export const networkApi = {
     const result = await request(networkBase, "/api/network/libraries/shared", { token });
     return result.libraries;
   },
-  saveLibrary: (token, libraryId) => request(networkBase, `/api/network/libraries/${libraryId}/save`, {
-    method: "POST",
-    token,
-  }),
+  saveLibrary: async (token, libraryId) => {
+    const result = await request(networkBase, `/api/network/libraries/${libraryId}/save`, {
+      method: "POST",
+      token,
+    });
+    if (result === null) return true;
+    if (result.saved !== true) throw new Error("The library was not saved. Please try again.");
+    return true;
+  },
   unsaveLibrary: (token, libraryId) => request(networkBase, `/api/network/libraries/${libraryId}/save`, {
     method: "DELETE",
     token,
