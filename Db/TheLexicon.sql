@@ -469,6 +469,45 @@ BEGIN
 END;
 GO
 
+IF OBJECT_ID(N'dbo.ChatRequests', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.ChatRequests
+    (
+        Id INT IDENTITY(1,1) NOT NULL,
+        RequesterUserId INT NOT NULL,
+        RecipientUserId INT NOT NULL,
+        Status NVARCHAR(16) NOT NULL
+            CONSTRAINT DF_ChatRequests_Status DEFAULT (N'PENDING'),
+        ConversationId INT NULL,
+        CreatedAt DATETIMEOFFSET(7) NOT NULL
+            CONSTRAINT DF_ChatRequests_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        ResolvedAt DATETIMEOFFSET(7) NULL,
+        CONSTRAINT PK_ChatRequests PRIMARY KEY CLUSTERED (Id),
+        CONSTRAINT FK_ChatRequests_Requester FOREIGN KEY (RequesterUserId)
+            REFERENCES dbo.Users (Id),
+        CONSTRAINT FK_ChatRequests_Recipient FOREIGN KEY (RecipientUserId)
+            REFERENCES dbo.Users (Id),
+        CONSTRAINT FK_ChatRequests_Conversation FOREIGN KEY (ConversationId)
+            REFERENCES dbo.ChatConversations (Id),
+        CONSTRAINT CK_ChatRequests_DifferentUsers CHECK (RequesterUserId <> RecipientUserId),
+        CONSTRAINT CK_ChatRequests_Status CHECK
+            (Status IN (N'PENDING', N'ACCEPTED', N'DECLINED'))
+    );
+END;
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1 FROM sys.indexes
+    WHERE object_id = OBJECT_ID(N'dbo.ChatRequests')
+      AND name = N'IX_ChatRequests_Recipient_Status_Created'
+)
+BEGIN
+    CREATE INDEX IX_ChatRequests_Recipient_Status_Created
+        ON dbo.ChatRequests (RecipientUserId, Status, CreatedAt DESC);
+END;
+GO
+
 IF OBJECT_ID(N'dbo.Notifications', N'U') IS NULL
 BEGIN
     CREATE TABLE dbo.Notifications
@@ -480,6 +519,7 @@ BEGIN
         LibraryId INT NULL,
         AccessRequestId INT NULL,
         ConversationId INT NULL,
+        ChatRequestId INT NULL,
         CreatedAt DATETIMEOFFSET(7) NOT NULL
             CONSTRAINT DF_Notifications_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
         ReadAt DATETIMEOFFSET(7) NULL,
@@ -488,11 +528,47 @@ BEGIN
             REFERENCES dbo.Users (Id),
         CONSTRAINT FK_Notifications_Actor FOREIGN KEY (ActorUserId)
             REFERENCES dbo.Users (Id),
-        CONSTRAINT CK_Notifications_Type CHECK
-            (Type IN (N'FOLLOW', N'LIBRARY_ACCESS_REQUEST', N'LIBRARY_ACCESS_APPROVED',
-                      N'LIBRARY_ACCESS_DECLINED', N'CHAT_MESSAGE'))
+        CONSTRAINT FK_Notifications_ChatRequest FOREIGN KEY (ChatRequestId)
+            REFERENCES dbo.ChatRequests (Id)
     );
 END;
+GO
+
+IF COL_LENGTH(N'dbo.Notifications', N'ChatRequestId') IS NULL
+BEGIN
+    ALTER TABLE dbo.Notifications ADD ChatRequestId INT NULL;
+END;
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1 FROM sys.foreign_keys
+    WHERE parent_object_id = OBJECT_ID(N'dbo.Notifications')
+      AND name = N'FK_Notifications_ChatRequest'
+)
+BEGIN
+    ALTER TABLE dbo.Notifications
+        ADD CONSTRAINT FK_Notifications_ChatRequest FOREIGN KEY (ChatRequestId)
+            REFERENCES dbo.ChatRequests (Id);
+END;
+GO
+
+IF EXISTS
+(
+    SELECT 1 FROM sys.check_constraints
+    WHERE parent_object_id = OBJECT_ID(N'dbo.Notifications')
+      AND name = N'CK_Notifications_Type'
+)
+BEGIN
+    ALTER TABLE dbo.Notifications DROP CONSTRAINT CK_Notifications_Type;
+END;
+GO
+
+ALTER TABLE dbo.Notifications
+    ADD CONSTRAINT CK_Notifications_Type CHECK
+        (Type IN (N'FOLLOW', N'LIBRARY_ACCESS_REQUEST', N'LIBRARY_ACCESS_APPROVED',
+                  N'LIBRARY_ACCESS_DECLINED', N'LIBRARY_SAVED', N'CHAT_MESSAGE', N'CHAT_REQUEST',
+                  N'CHAT_REQUEST_ACCEPTED', N'CHAT_REQUEST_DECLINED'));
 GO
 
 IF NOT EXISTS

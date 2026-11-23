@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
-import { Bell, Bookmark, MessageCircle, UserRound, Users } from "lucide-react";
+import { Bell, Bookmark, Check, MessageCircle, UserRound, Users, X } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
-import { networkApi } from "../api.js";
+import { chatApi, networkApi } from "../api.js";
 import { EmptyPage, PageTitle } from "./WorkspaceComponents.jsx";
 
 const NOTIFICATION_DETAILS = {
@@ -25,10 +25,30 @@ const NOTIFICATION_DETAILS = {
     describe: (notification) => `${notification.actorName || notification.actorUsername} declined your request to ${notification.libraryName || "a library"}.`,
     href: () => "/saved",
   },
+  LIBRARY_SAVED: {
+    icon: Bookmark,
+    describe: (notification) => `${notification.actorName || notification.actorUsername} saved your library${notification.libraryName ? ` "${notification.libraryName}"` : ""}.`,
+    href: (notification) => `/libraries/${notification.libraryId}`,
+  },
   CHAT_MESSAGE: {
     icon: MessageCircle,
     describe: (notification) => `${notification.actorName || notification.actorUsername} sent you a message.`,
     href: (notification) => `/messages/${notification.conversationId}`,
+  },
+  CHAT_REQUEST: {
+    icon: MessageCircle,
+    describe: (notification) => `${notification.actorName || notification.actorUsername} wants to chat with you.`,
+    href: (notification) => `/profiles/${notification.actorId}`,
+  },
+  CHAT_REQUEST_ACCEPTED: {
+    icon: MessageCircle,
+    describe: (notification) => `${notification.actorName || notification.actorUsername} accepted your chat request.`,
+    href: (notification) => `/messages/${notification.conversationId}`,
+  },
+  CHAT_REQUEST_DECLINED: {
+    icon: MessageCircle,
+    describe: (notification) => `${notification.actorName || notification.actorUsername} declined your chat request.`,
+    href: (notification) => `/profiles/${notification.actorId}`,
   },
 };
 
@@ -37,6 +57,7 @@ export default function NotificationsPage({ token, onUnreadCountChange }) {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [respondingRequestId, setRespondingRequestId] = useState(null);
 
   const loadNotifications = useCallback(async () => {
     setLoading(true);
@@ -86,6 +107,27 @@ export default function NotificationsPage({ token, onUnreadCountChange }) {
     }
   }
 
+  async function respondToChatRequest(event, notification, decision) {
+    event.preventDefault();
+    event.stopPropagation();
+    setRespondingRequestId(notification.chatRequestId);
+    setError("");
+    try {
+      const request = await chatApi.respondToRequest(token, notification.chatRequestId, decision);
+      setNotifications((current) => current.map((item) => item.id === notification.id
+        ? { ...item, readAt: item.readAt ?? new Date().toISOString(), chatRequestStatus: request.status }
+        : item));
+      if (!notification.readAt) onUnreadCountChange((count) => Math.max(0, count - 1));
+      if (decision === "ACCEPTED" && request.conversationId) {
+        navigate(`/messages/${request.conversationId}`);
+      }
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setRespondingRequestId(null);
+    }
+  }
+
   const unreadCount = notifications.filter((notification) => !notification.readAt).length;
 
   return (
@@ -93,7 +135,7 @@ export default function NotificationsPage({ token, onUnreadCountChange }) {
       <PageTitle
         eyebrow="YOUR ACCOUNT"
         title="Notifications"
-        description="Keep up with follows, library access, and messages."
+        description="Keep up with follows, library access, messages, and chat requests."
       />
       {error && <div className="page-alert" role="alert">{error}</div>}
       <div className="notifications-toolbar">
@@ -110,29 +152,51 @@ export default function NotificationsPage({ token, onUnreadCountChange }) {
             const details = NOTIFICATION_DETAILS[notification.type];
             const Icon = details?.icon ?? UserRound;
             return (
-              <Link
+              <div
                 className={`notification-item ${notification.readAt ? "read" : "unread"}`}
                 key={notification.id}
-                to={details?.href(notification) ?? "/notifications"}
-                onClick={(event) => openNotification(event, notification)}
               >
-                <span className="notification-icon"><Icon size={17} /></span>
-                <span className="notification-copy">
-                  <strong>{details?.describe(notification) ?? "There is an update to your account."}</strong>
-                  <time dateTime={notification.createdAt}>
-                    {new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" })
-                      .format(new Date(notification.createdAt))}
-                  </time>
-                </span>
-                {!notification.readAt && <span className="notification-unread-dot" aria-label="Unread" />}
-              </Link>
+                <Link
+                  className="notification-main"
+                  to={details?.href(notification) ?? "/notifications"}
+                  onClick={(event) => openNotification(event, notification)}
+                >
+                  <span className="notification-icon"><Icon size={17} /></span>
+                  <span className="notification-copy">
+                    <strong>{details?.describe(notification) ?? "There is an update to your account."}</strong>
+                    <time dateTime={notification.createdAt}>
+                      {new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" })
+                        .format(new Date(notification.createdAt))}
+                    </time>
+                  </span>
+                  {!notification.readAt && <span className="notification-unread-dot" aria-label="Unread" />}
+                </Link>
+                {notification.type === "CHAT_REQUEST" && notification.chatRequestStatus === "PENDING" && (
+                  <div className="notification-actions">
+                    <button
+                      className="button button-outline"
+                      disabled={respondingRequestId === notification.chatRequestId}
+                      onClick={(event) => respondToChatRequest(event, notification, "DECLINED")}
+                    >
+                      <X size={14} /> Decline
+                    </button>
+                    <button
+                      className="button button-primary"
+                      disabled={respondingRequestId === notification.chatRequestId}
+                      onClick={(event) => respondToChatRequest(event, notification, "ACCEPTED")}
+                    >
+                      <Check size={14} /> Accept
+                    </button>
+                  </div>
+                )}
+              </div>
             );
           })}
         </div>
       ) : (
         <EmptyPage
           title="No notifications yet."
-          description="New followers, private-library requests, access decisions, and messages will show up here."
+          description="New followers, library requests, chat requests, and messages will show up here."
         />
       )}
       <Link className="notifications-profile-link" to="/profile">

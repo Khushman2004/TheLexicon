@@ -293,6 +293,26 @@ export const chatApi = {
     const result = await request(chatBase, "/api/chat/conversations", { token });
     return result.conversations;
   },
+  getRequestStatus: async (token, otherUserId) => {
+    const result = await request(chatBase, `/api/chat/requests/status/${otherUserId}`, { token });
+    return result.request;
+  },
+  sendRequest: async (token, recipientId) => {
+    const result = await request(chatBase, "/api/chat/requests", {
+      method: "POST",
+      token,
+      ...jsonBody({ recipientId }),
+    });
+    return result.request;
+  },
+  respondToRequest: async (token, requestId, decision) => {
+    const result = await request(chatBase, `/api/chat/requests/${requestId}`, {
+      method: "PATCH",
+      token,
+      ...jsonBody({ decision }),
+    });
+    return result.request;
+  },
   openConversation: async (token, recipientId) => {
     const result = await request(chatBase, "/api/chat/conversations", {
       method: "POST",

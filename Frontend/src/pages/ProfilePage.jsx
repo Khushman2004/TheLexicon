@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { io } from "socket.io-client";
 import { ArrowRight, Bookmark, Check, MessageCircle, Save, Shield, UserRound, Users } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { getChatSocketUrl, networkApi } from "../api.js";
+import { chatApi, getChatSocketUrl, networkApi } from "../api.js";
 import { EmptyPage, PageTitle } from "./WorkspaceComponents.jsx";
 
 export default function ProfilePage({ token, currentUserId, onProfileUpdated }) {
@@ -17,6 +17,8 @@ export default function ProfilePage({ token, currentUserId, onProfileUpdated }) 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [isOnline, setIsOnline] = useState(false);
+  const [chatRequest, setChatRequest] = useState(null);
+  const [sendingChatRequest, setSendingChatRequest] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -44,6 +46,19 @@ export default function ProfilePage({ token, currentUserId, onProfileUpdated }) 
       .finally(() => active && setPending(false));
     return () => { active = false; };
   }, [token, isSelf, userId]);
+
+  useEffect(() => {
+    if (isSelf || !profile?.id) {
+      setChatRequest(null);
+      return undefined;
+    }
+    let active = true;
+    setChatRequest(null);
+    chatApi.getRequestStatus(token, profile.id)
+      .then((result) => active && setChatRequest(result))
+      .catch((requestError) => active && setError(requestError.message));
+    return () => { active = false; };
+  }, [token, isSelf, profile?.id]);
 
   useEffect(() => {
     if (isSelf || !profile?.isMutual) {
@@ -106,6 +121,30 @@ export default function ProfilePage({ token, currentUserId, onProfileUpdated }) 
     }
   }
 
+  async function handleChatAction() {
+    if (chatRequest?.status === "ACCEPTED" && chatRequest.conversationId) {
+      navigate(`/messages/${chatRequest.conversationId}`);
+      return;
+    }
+    if (chatRequest?.status === "RECEIVED") {
+      navigate("/notifications");
+      return;
+    }
+    setSendingChatRequest(true);
+    setError("");
+    try {
+      const result = await chatApi.sendRequest(token, profile.id);
+      setChatRequest(result);
+      if (result.status === "ACCEPTED" && result.conversationId) {
+        navigate(`/messages/${result.conversationId}`);
+      }
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setSendingChatRequest(false);
+    }
+  }
+
   async function toggleSave(library) {
     setSaving(true);
     setError("");
@@ -149,8 +188,21 @@ export default function ProfilePage({ token, currentUserId, onProfileUpdated }) 
               <button className="button button-primary" onClick={() => setEditing((current) => !current)}><Save size={15} /> {editing ? "Cancel editing" : "Edit profile"}</button>
             ) : (
               <>
-                <button className="button button-outline" disabled={saving} onClick={toggleFollow}>{profile.isFollowing ? "Following" : "Follow"}</button>
-                {profile.isMutual && <button className="button button-primary" onClick={() => navigate(`/messages/new/${profile.id}`)}><MessageCircle size={15} /> Message</button>}
+                <button className="button button-outline" disabled={saving} onClick={toggleFollow}>{profile.isFollowing ? "Unfollow" : "Follow"}</button>
+                <button
+                  className="button button-primary"
+                  disabled={!chatRequest || sendingChatRequest || chatRequest.status === "SENT"}
+                  onClick={handleChatAction}
+                >
+                  <MessageCircle size={15} />
+                  {!chatRequest ? "Loading…" : sendingChatRequest ? "Sending…" : ({
+                    SENT: "Request sent",
+                    RECEIVED: "View request",
+                    ACCEPTED: "Open chat",
+                    DECLINED: "Chat",
+                    NONE: "Chat",
+                  }[chatRequest.status] ?? "Chat")}
+                </button>
               </>
             )}
           </div>

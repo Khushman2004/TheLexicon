@@ -66,4 +66,4 @@ Content-Type: application/json
 
 ## Data
 
-Notifications are recorded for new followers, private-library access requests and decisions, and incoming chat messages. The rerunnable `Db/TheLexicon.sql` script creates `Notifications` alongside `UserFollows`, `SavedLibraries`, `LibraryInvites`, `LibraryAccessRequests`, and `LibraryAccessGrants`. It preserves existing data. The service does not store raw session tokens or invite tokens.
+Notifications are recorded for new followers, library saves, private-library access requests and decisions, and incoming chat messages. The rerunnable `Db/TheLexicon.sql` script creates `Notifications` alongside `UserFollows`, `SavedLibraries`, `LibraryInvites`, `LibraryAccessRequests`, and `LibraryAccessGrants`. It preserves existing data. The service does not store raw session tokens or invite tokens.

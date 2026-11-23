@@ -19,6 +19,31 @@ export function createChatRoutes(authenticationService, chatService) {
       conversation: await chatService.openConversation(request.userId, request.body.recipientId),
     });
   });
+  router.get("/requests/status/:otherUserId", async (request, response) => {
+    response.json({
+      request: await chatService.getChatRequestStatus(request.userId, request.params.otherUserId),
+    });
+  });
+  router.post("/requests", async (request, response) => {
+    if (!request.body || typeof request.body !== "object" || Array.isArray(request.body)) {
+      throw new HttpError(400, "Request body must be a JSON object.");
+    }
+    response.status(201).json({
+      request: await chatService.sendChatRequest(request.userId, request.body.recipientId),
+    });
+  });
+  router.patch("/requests/:requestId", async (request, response) => {
+    if (!request.body || typeof request.body !== "object" || Array.isArray(request.body)) {
+      throw new HttpError(400, "Request body must be a JSON object.");
+    }
+    response.json({
+      request: await chatService.respondToChatRequest(
+        request.userId,
+        request.params.requestId,
+        request.body.decision,
+      ),
+    });
+  });
   router.get("/conversations/:conversationId/messages", async (request, response) => {
     const messages = await chatService.listMessages(
       request.userId,

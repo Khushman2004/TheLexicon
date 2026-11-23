@@ -181,13 +181,16 @@ export class NetworkRepository {
       .input("userId", sql.Int, userId)
       .query(`
         SELECT TOP (100) n.Id AS id, n.Type AS type, n.LibraryId AS libraryId,
-          n.AccessRequestId AS accessRequestId, n.ConversationId AS conversationId,
+          n.AccessRequestId AS accessRequestId,
+          COALESCE(n.ConversationId, chatRequest.ConversationId) AS conversationId,
+          n.ChatRequestId AS chatRequestId, chatRequest.Status AS chatRequestStatus,
           n.CreatedAt AS createdAt, n.ReadAt AS readAt,
           u.Id AS actorId, u.Username AS actorUsername, u.FullName AS actorName,
           l.Name AS libraryName
         FROM dbo.Notifications AS n
         INNER JOIN dbo.Users AS u ON u.Id = n.ActorUserId
         LEFT JOIN dbo.Libraries AS l ON l.Id = n.LibraryId
+        LEFT JOIN dbo.ChatRequests AS chatRequest ON chatRequest.Id = n.ChatRequestId
         WHERE n.RecipientUserId = @userId
         ORDER BY n.CreatedAt DESC, n.Id DESC;
 
@@ -298,7 +301,7 @@ export class NetworkRepository {
         .input("userId", sql.Int, userId)
         .input("libraryId", sql.Int, libraryId)
         .query(`
-          SELECT l.Id AS id
+          SELECT l.Id AS id, l.UserId AS ownerId
           FROM dbo.Libraries AS l WITH (UPDLOCK, HOLDLOCK)
           WHERE l.Id = @libraryId
             AND (l.IsPublic = 1 OR EXISTS (
@@ -324,6 +327,17 @@ export class NetworkRepository {
           .query(`
             INSERT INTO dbo.SavedLibraries (UserId, LibraryId)
             VALUES (@userId, @libraryId);`);
+        const ownerId = accessible.recordset[0].ownerId;
+        if (ownerId !== userId) {
+          await new sql.Request(transaction)
+            .input("ownerId", sql.Int, ownerId)
+            .input("userId", sql.Int, userId)
+            .input("libraryId", sql.Int, libraryId)
+            .query(`
+              INSERT INTO dbo.Notifications
+                (RecipientUserId, ActorUserId, Type, LibraryId)
+              VALUES (@ownerId, @userId, N'LIBRARY_SAVED', @libraryId);`);
+        }
       }
 
       await transaction.commit();

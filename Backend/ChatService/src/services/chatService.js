@@ -17,6 +17,30 @@ export class ChatService {
     return conversation;
   }
 
+  async getChatRequestStatus(userId, otherUserId) {
+    const target = readId(otherUserId, "otherUserId");
+    if (target === userId) throw new HttpError(400, "You cannot request a chat with yourself.");
+    return this.repository.getChatRequestStatus(userId, target);
+  }
+
+  async sendChatRequest(userId, recipientId) {
+    const target = readId(recipientId, "recipientId");
+    if (target === userId) throw new HttpError(400, "You cannot request a chat with yourself.");
+    const request = await this.repository.sendChatRequest(userId, target);
+    if (!request) throw new HttpError(404, "User not found.");
+    return request;
+  }
+
+  async respondToChatRequest(userId, requestId, decision) {
+    const id = readId(requestId, "requestId");
+    if (!["ACCEPTED", "DECLINED"].includes(decision)) {
+      throw new HttpError(400, "decision must be ACCEPTED or DECLINED.");
+    }
+    const result = await this.repository.respondToChatRequest(userId, id, decision);
+    if (!result) throw new HttpError(404, "Chat request not found or already resolved.");
+    return result;
+  }
+
   async listMessages(userId, conversationId, before) {
     const id = readId(conversationId, "conversationId");
     if (before !== undefined && !/^\d+$/.test(String(before))) {
@@ -42,7 +66,7 @@ export class ChatService {
       throw new HttpError(400, "Message must contain 1 to 4000 characters.");
     }
     const message = await this.repository.createMessage(userId, id, body.trim());
-    if (!message) throw new HttpError(403, "Conversation is not available; mutual following is required.");
+    if (!message) throw new HttpError(403, "Conversation is not available.");
     return message;
   }
 }

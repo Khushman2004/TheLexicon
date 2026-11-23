@@ -170,7 +170,7 @@ export default function ChatPage({ token, currentUserId }) {
               </span>
               <span className={`presence-dot ${onlineUsers.has(conversation.otherUserId) ? "online" : ""}`} />
             </button>
-          )) : <p className="conversation-empty">You have no chats yet. Message a mutual follower from their profile.</p>}
+          )) : <p className="conversation-empty">You have no chats yet. Send a chat request from a profile or accept one in your notifications.</p>}
           <Link className="conversation-discover-link" to="/network"><ArrowLeft size={14} /> Find readers</Link>
         </aside>
         <section className="chat-thread">
@@ -196,7 +196,7 @@ export default function ChatPage({ token, currentUserId }) {
               </form>
             </>
           ) : (
-            <div className="chat-empty-state"><div><MessageCircle size={26} /></div><h2>Every good idea begins with a conversation.</h2><p>Follow each other to start a private chat. Your new conversations will appear here.</p><Link className="button button-primary" to="/network">Find readers <ArrowLeft size={14} /></Link></div>
+            <div className="chat-empty-state"><div><MessageCircle size={26} /></div><h2>Every good idea begins with a conversation.</h2><p>Once a chat request is accepted, your conversation will appear here.</p><Link className="button button-primary" to="/network">Find readers <ArrowLeft size={14} /></Link></div>
           )}
         </section>
       </section>

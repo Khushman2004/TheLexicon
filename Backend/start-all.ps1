@@ -20,6 +20,18 @@ foreach ($service in $services) {
     }
 }
 
+$libraryServicePath = Join-Path $backendPath "LibraryService"
+Push-Location $libraryServicePath
+try {
+    & npm run db:setup
+    if ($LASTEXITCODE -ne 0) {
+        throw "Database setup failed. Check the SQL Server connection and DB_* environment variables."
+    }
+}
+finally {
+    Pop-Location
+}
+
 foreach ($service in $services) {
     $servicePath = Join-Path $backendPath $service
     Start-Process -FilePath $env:ComSpec `

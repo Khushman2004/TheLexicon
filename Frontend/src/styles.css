@@ -766,14 +766,17 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .profile-visibility-option input { accent-color: #526a57; }
 .notifications-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 20px 0 12px; color: #7d877d; font-size: 11px; }
 .notification-list { display: grid; gap: 8px; }
-.notification-item { display: flex; min-width: 0; align-items: center; gap: 13px; padding: 14px 16px; color: inherit; border: 1px solid #e5e2d9; border-radius: 11px; background: rgba(255,255,255,.55); text-decoration: none; transition: background .16s ease, border-color .16s ease; }
+.notification-item { display: flex; min-width: 0; align-items: center; gap: 13px; padding: 14px 16px; color: inherit; border: 1px solid #e5e2d9; border-radius: 11px; background: rgba(255,255,255,.55); transition: background .16s ease, border-color .16s ease; }
 .notification-item:hover { border-color: #c9d2c4; background: #fffefa; }
 .notification-item.unread { border-color: #d3ddce; background: #f5f7f0; }
+.notification-main { display: flex; min-width: 0; flex: 1; align-items: center; gap: 13px; color: inherit; text-decoration: none; }
 .notification-icon { display: grid; width: 36px; height: 36px; flex: 0 0 auto; place-items: center; color: #526a57; border-radius: 10px; background: #e8ece2; }
 .notification-copy { display: grid; flex: 1; gap: 5px; }
 .notification-copy strong { color: #394b3f; font-size: 11px; font-weight: 600; line-height: 1.5; }
 .notification-copy time { color: #899087; font-size: 9px; }
 .notification-unread-dot { width: 8px; height: 8px; flex: 0 0 auto; border-radius: 50%; background: #648064; }
+.notification-actions { display: flex; flex: 0 0 auto; gap: 7px; }
+.notification-actions .button { min-height: 34px; padding: 7px 10px; font-size: 10px; }
 .notifications-profile-link { display: inline-flex; align-items: center; gap: 6px; margin-top: 20px; color: #61745f; font-size: 10px; text-decoration: none; }
 .notifications-profile-link:hover { color: #344a40; }
 .connection-card-grid { margin-top: 22px; }
