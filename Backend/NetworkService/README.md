@@ -36,6 +36,7 @@ All paths are prefixed with `/api/network`.
 | GET | `/notifications` | List the latest 100 notifications and unread count |
 | PATCH | `/notifications/:notificationId/read` | Mark one notification as read |
 | PATCH | `/notifications/read-all` | Mark all notifications as read |
+| DELETE | `/notifications/clear-all` | Delete all notifications belonging to the signed-in user |
 | GET | `/users?search=<term>` | Search public profiles |
 | GET | `/users/:userId` | View a profile and its public libraries |
 | POST, DELETE | `/users/:userId/follow` | Follow or unfollow a public profile |
@@ -66,4 +67,4 @@ Content-Type: application/json
 
 ## Data
 
-Notifications are recorded for new followers, library saves, private-library access requests and decisions, and incoming chat messages. The rerunnable `Db/TheLexicon.sql` script creates `Notifications` alongside `UserFollows`, `SavedLibraries`, `LibraryInvites`, `LibraryAccessRequests`, and `LibraryAccessGrants`. It preserves existing data. The service does not store raw session tokens or invite tokens.
+Notifications are recorded for new followers, library saves, private-library access requests and decisions, incoming chat messages, and community activity such as membership, announcements, shared-library additions, and general chat. Community notifications include the community ID and activity details so the frontend can link to the right community. Members can mute community activity per community through ChatService; clearing notifications only affects the signed-in user's notifications. The rerunnable `Db/TheLexicon.sql` script creates `Notifications` alongside `UserFollows`, `SavedLibraries`, `LibraryInvites`, `LibraryAccessRequests`, and `LibraryAccessGrants`. It preserves existing data. The service does not store raw session tokens or invite tokens.

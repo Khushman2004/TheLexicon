@@ -14,6 +14,10 @@ The Lexicon is a personal library for collecting words, phrases, reading notes, 
   - **Custom models & research** for custom models, theories, and research notes
 - Search and sort entries; add, edit, and delete entries.
 - Open a reading space's **Words**, **Phrases**, and **Custom theories** sections to keep notes with the book, paper, or article.
+- Create and discover public or private communities, join with a public listing or invitation, and manage membership.
+- Publish community announcements and chat live in a member-only general chat.
+- Contribute typed entries to shared community libraries organized into the same five models as personal libraries.
+- Receive social and community activity notifications, mute activity per community, and clear notifications from your account.
 - Navigate using bookmarkable URLs and browser back/forward controls.
 
 ## Technology
@@ -159,9 +163,9 @@ For deployment, configure `CORS_ORIGINS` on all backend services to the exact fr
 .
 ├── Backend/
 │   ├── AuthService/       # Registration, login, sessions, user data
-│   ├── LibraryService/    # Libraries, entry types, ownership and authorization
-│   ├── NetworkService/    # Profiles, follows, discovery, private-library sharing
-│   └── ChatService/       # Persisted live chat and mutual-follower presence
+│   ├── LibraryService/    # Personal and community libraries, typed entries and authorization
+│   ├── NetworkService/    # Profiles, follows, notifications, private-library sharing
+│   └── ChatService/       # Communities, announcements, persisted chat and presence
 ├── Db/
 │   └── TheLexicon.sql     # Idempotent database/schema setup and updates
 ├── Frontend/
@@ -182,7 +186,9 @@ For deployment, configure `CORS_ORIGINS` on all backend services to the exact fr
 3. The frontend sends authenticated library requests to LibraryService. LibraryService checks the token against the shared database and scopes libraries and entries to the signed-in user.
 4. LibraryService stores typed content in `dbo.LibraryEntries`; parent-entry links represent reading-space sections and their contents.
 5. NetworkService manages profiles and follow relationships. Private-library invitations are hashed, expire, and require owner approval before granting read-only access.
-6. ChatService validates shared sessions and mutual follows for every conversation and message. Socket.IO pushes persisted messages and mutual-follower presence.
+6. ChatService validates shared sessions and mutual follows for one-to-one conversations, and community membership for community chat. Socket.IO pushes persisted messages and presence.
+7. Communities, memberships, invitations, announcements, and community chat are managed by ChatService. LibraryService creates the five shared models for each community and scopes entries to community membership.
+8. NetworkService and the other services write activity notifications to the signed-in user's notification feed. Community notification preferences are stored per member and community.
 
 The main frontend routes are:
 
@@ -197,7 +203,9 @@ The main frontend routes are:
 | `/profiles/:userId` | View a reader profile and public shelves |
 | `/connections/:userId/followers` | View a profile's followers |
 | `/connections/:userId/following` | View who a profile follows |
-| `/notifications` | Review follows, private-library access requests/decisions, and incoming messages |
+| `/community` | Discover, create, or view your communities |
+| `/community/:communityId` | Open community announcements, chat, shared libraries, and member controls |
+| `/notifications` | Review social, library, chat, and community activity notifications |
 | `/saved` | View saved public libraries and approved private shares |
 | `/share/:token` | Request owner-approved access to a private library |
 | `/messages` | Live conversations with mutual followers |
@@ -232,7 +240,7 @@ LibraryService (`http://localhost:5001`):
 | `GET` | `/api/libraries/shared/:libraryId` | Read a public or owner-approved shared library |
 | `GET` | `/api/libraries/shared/:libraryId/models/:modelKey/entries` | Read a public or explicitly shared model |
 
-NetworkService (`http://localhost:5002`) provides authenticated profile editing/search, follows, public library discovery and saving, owner-approved private-library invitations, and notifications. ChatService (`http://localhost:5003`) provides authenticated conversation history and mutual-follower-only Socket.IO messages and online presence; incoming messages create notifications. Their complete endpoint and event contracts are in the linked service READMEs below.
+NetworkService (`http://localhost:5002`) provides authenticated profile editing/search, follows, public library discovery and saving, owner-approved private-library invitations, and notifications, including per-user clear-all. ChatService (`http://localhost:5003`) provides one-to-one chat and community lifecycle, membership, invitations, announcements, and real-time community chat. Community settings allow members to mute activity notifications. LibraryService serves the community's five shared-library models and typed entries. Their complete endpoint and event contracts are in the linked service READMEs below.
 
 Except for `/health`, authenticated endpoints across LibraryService, NetworkService, and ChatService require `Authorization: Bearer <token>`; Socket.IO uses the same token in its handshake auth object. See the service READMEs for endpoint details and example payloads:
 

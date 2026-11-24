@@ -29,6 +29,21 @@ After selecting a library, its contents are organized into five models:
 
 The existing custom collections endpoint remains available for compatibility.
 
+## Community shared libraries
+
+Every community has the same five shared models as a personal library: Words, Phrases & Idioms, Reading Spaces, Poetry & Drama, and Custom Models & Research. Listing a community's shared libraries creates any missing model shelves and returns their `modelKey` values. Existing custom community libraries remain available in the database for compatibility.
+
+Any community member can add an entry to a shared model. Entry types must belong to that model. Contributors can edit or delete their own entries; the community owner can edit or delete any entry. Admins can edit entries but cannot delete another member's entry. All requests are authenticated and checked against current community membership.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/api/libraries/communities/:communityId/libraries` | List the five shared models and any legacy custom libraries |
+| POST | `/api/libraries/communities/:communityId/libraries/:libraryId/entries` | Add an entry with `entryType`, `title`, and optional `content` or `url` |
+| GET | `/api/libraries/communities/:communityId/libraries/:libraryId/entries` | List model entries |
+| PATCH, DELETE | `/api/libraries/communities/:communityId/libraries/:libraryId/entries/:entryId` | Edit or delete an entry subject to contributor/owner permissions |
+
+Supported `entryType` values depend on the model: `WORD`; `PHRASE` or `IDIOM`; `BOOK`, `PAPER`, or `ARTICLE`; `POEM`, `POETIC_DEVICE`, or `PLAY`; and `CUSTOM_MODEL`, `THEORY`, or `RESEARCH`. The custom community-library create endpoint remains available for backward compatibility; model shelves cannot be deleted.
+
 ## Endpoints
 
 All library endpoints require `Authorization: Bearer <token>`. `/health` is public. Paths are centralized in `src/config/endpoints.js`; typed modules have route files under `src/modules/`.

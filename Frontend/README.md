@@ -1,6 +1,6 @@
 # The Lexicon Frontend
 
-A responsive, route-based React app for AuthService and LibraryService. After signing in, each library has its own overview and separate pages for the five models: Words, Phrases & Idioms, Reading Spaces, Poetry & Drama, and Custom Models & Research.
+A responsive, route-based React app for AuthService and the Library, Network, and Chat services. After signing in, each personal library has its own overview and separate pages for the five models: Words, Phrases & Idioms, Reading Spaces, Poetry & Drama, and Custom Models & Research. Community shared libraries use the same five models.
 
 ## Run locally
 
@@ -40,6 +40,8 @@ Configure `CORS_ORIGINS` on all backend services to include the exact frontend o
 - From a library overview, make the library and each model public or private independently. A public model is viewable only while its library is public.
 - Use **Discover public** in the sidebar to browse other signed-in users' shared libraries and read their public models. Shared content is read-only.
 - Open **People & libraries** to search and follow readers, view profiles, browse public libraries, and save a library to **Saved shelves**.
+- Open **Community** to discover or create communities, join public communities or use an invitation code, read announcements, and participate in member-only general chat.
+- Community members can add typed entries to shared model libraries. Contributors can manage their own entries; the community owner can manage all entries and members. Community activity notifications can be muted individually.
 - Edit your profile at **Your profile**. Profile visibility controls whether the profile appears in people search.
 - On a private library overview, create a time-limited invite URL. A signed-in recipient requests access; the owner approves or declines requests and can revoke access later. Approved private libraries are read-only and appear in **Saved shelves**.
 - **Messages** are live between mutual followers only. Chat history is persisted; online presence is shown only to mutual followers.
