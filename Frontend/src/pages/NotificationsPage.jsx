@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Bell, Bookmark, Check, MessageCircle, UserRound, Users, X } from "lucide-react";
+import { Bell, Bookmark, Check, MessageCircle, UserRound, Users, X, Trash2 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { chatApi, networkApi } from "../api.js";
 import { EmptyPage, PageTitle } from "./WorkspaceComponents.jsx";
@@ -50,6 +50,11 @@ const NOTIFICATION_DETAILS = {
     describe: (notification) => `${notification.actorName || notification.actorUsername} declined your chat request.`,
     href: (notification) => `/profiles/${notification.actorId}`,
   },
+  COMMUNITY_ACTIVITY: {
+    icon: Users,
+    describe: (notification) => `${notification.actorName || notification.actorUsername || "Someone"} ${notification.details || "was active"}${notification.communityName ? ` in "${notification.communityName}"` : " in your community"}.`,
+    href: (notification) => notification.communityId ? `/community/${notification.communityId}` : "/community",
+  },
 };
 
 export default function NotificationsPage({ token, onUnreadCountChange }) {
@@ -58,6 +63,7 @@ export default function NotificationsPage({ token, onUnreadCountChange }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [respondingRequestId, setRespondingRequestId] = useState(null);
+  const [clearing, setClearing] = useState(false);
 
   const loadNotifications = useCallback(async () => {
     setLoading(true);
@@ -107,6 +113,21 @@ export default function NotificationsPage({ token, onUnreadCountChange }) {
     }
   }
 
+  async function clearAll() {
+    if (!window.confirm("Clear all notifications? This cannot be undone.")) return;
+    setClearing(true);
+    setError("");
+    try {
+      await networkApi.clearAllNotifications(token);
+      setNotifications([]);
+      onUnreadCountChange(0);
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setClearing(false);
+    }
+  }
+
   async function respondToChatRequest(event, notification, decision) {
     event.preventDefault();
     event.stopPropagation();
@@ -135,14 +156,19 @@ export default function NotificationsPage({ token, onUnreadCountChange }) {
       <PageTitle
         eyebrow="YOUR ACCOUNT"
         title="Notifications"
-        description="Keep up with follows, library access, messages, and chat requests."
+        description="Keep up with follows, library access, messages, community activity, and chat requests."
       />
       {error && <div className="page-alert" role="alert">{error}</div>}
       <div className="notifications-toolbar">
         <span>{unreadCount ? `${unreadCount} unread` : "You're all caught up"}</span>
-        <button className="button button-outline" disabled={!unreadCount} onClick={markAllRead}>
-          Mark all as read
-        </button>
+        <div className="notifications-toolbar-actions">
+          <button className="button button-outline" disabled={!unreadCount} onClick={markAllRead}>
+            Mark all as read
+          </button>
+          <button className="button button-outline" disabled={!notifications.length || clearing} onClick={clearAll}>
+            <Trash2 size={14} />{clearing ? "Clearing…" : "Clear all"}
+          </button>
+        </div>
       </div>
       {loading ? (
         <div className="page-loading">Gathering your notifications…</div>
@@ -196,7 +222,7 @@ export default function NotificationsPage({ token, onUnreadCountChange }) {
       ) : (
         <EmptyPage
           title="No notifications yet."
-          description="New followers, library requests, chat requests, and messages will show up here."
+          description="New followers, library activity, chat requests, and messages will show up here."
         />
       )}
       <Link className="notifications-profile-link" to="/profile">

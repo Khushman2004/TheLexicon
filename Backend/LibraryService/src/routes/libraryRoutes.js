@@ -39,6 +39,78 @@ export function createLibraryRoutes(authenticationService, libraryService) {
     response.json({ libraries });
   });
 
+  router.get("/communities/:communityId/libraries", async (request, response) => {
+    response.json({
+      libraries: await libraryService.listCommunityLibraries(request.userId, request.params.communityId),
+    });
+  });
+  router.post("/communities/:communityId/libraries", async (request, response) => {
+    response.status(201).json({
+      library: await libraryService.createCommunityLibrary(
+        request.userId,
+        request.params.communityId,
+        request.body,
+      ),
+    });
+  });
+  router.patch("/communities/:communityId/libraries/:libraryId", async (request, response) => {
+    response.json({
+      library: await libraryService.updateCommunityLibrary(
+        request.userId,
+        request.params.communityId,
+        request.params.libraryId,
+        request.body,
+      ),
+    });
+  });
+  router.delete("/communities/:communityId/libraries/:libraryId", async (request, response) => {
+    await libraryService.deleteCommunityLibrary(
+      request.userId,
+      request.params.communityId,
+      request.params.libraryId,
+    );
+    response.status(204).send();
+  });
+  router.get("/communities/:communityId/libraries/:libraryId/entries", async (request, response) => {
+    response.json({
+      entries: await libraryService.listCommunityEntries(
+        request.userId,
+        request.params.communityId,
+        request.params.libraryId,
+      ),
+    });
+  });
+  router.post("/communities/:communityId/libraries/:libraryId/entries", async (request, response) => {
+    response.status(201).json({
+      entry: await libraryService.createCommunityEntry(
+        request.userId,
+        request.params.communityId,
+        request.params.libraryId,
+        request.body,
+      ),
+    });
+  });
+  router.patch("/communities/:communityId/libraries/:libraryId/entries/:entryId", async (request, response) => {
+    response.json({
+      entry: await libraryService.updateCommunityEntry(
+        request.userId,
+        request.params.communityId,
+        request.params.libraryId,
+        request.params.entryId,
+        request.body,
+      ),
+    });
+  });
+  router.delete("/communities/:communityId/libraries/:libraryId/entries/:entryId", async (request, response) => {
+    await libraryService.deleteCommunityEntry(
+      request.userId,
+      request.params.communityId,
+      request.params.libraryId,
+      request.params.entryId,
+    );
+    response.status(204).send();
+  });
+
   router.get(ENDPOINTS.LIBRARIES.PUBLIC_LIBRARY, async (request, response) => {
     const result = await libraryService.getPublicLibrary(request.params.libraryId);
     response.json(result);

@@ -172,6 +172,56 @@ export const libraryApi = {
     `${entryPath(libraryId, category)}/${entryId}`,
     { method: "DELETE", token },
   ),
+  listCommunityLibraries: async (token, communityId) => {
+    const result = await request(libraryBase, `/api/libraries/communities/${communityId}/libraries`, { token });
+    return result.libraries;
+  },
+  createCommunityLibrary: async (token, communityId, details) => {
+    const result = await request(libraryBase, `/api/libraries/communities/${communityId}/libraries`, {
+      method: "POST", token, ...jsonBody(details),
+    });
+    return result.library;
+  },
+  updateCommunityLibrary: async (token, communityId, libraryId, updates) => {
+    const result = await request(libraryBase, `/api/libraries/communities/${communityId}/libraries/${libraryId}`, {
+      method: "PATCH", token, ...jsonBody(updates),
+    });
+    return result.library;
+  },
+  deleteCommunityLibrary: (token, communityId, libraryId) => request(
+    libraryBase,
+    `/api/libraries/communities/${communityId}/libraries/${libraryId}`,
+    { method: "DELETE", token },
+  ),
+  listCommunityEntries: async (token, communityId, libraryId) => {
+    const result = await request(
+      libraryBase,
+      `/api/libraries/communities/${communityId}/libraries/${libraryId}/entries`,
+      { token },
+    );
+    return result.entries;
+  },
+  createCommunityEntry: async (token, communityId, libraryId, details) => {
+    const result = await request(
+      libraryBase,
+      `/api/libraries/communities/${communityId}/libraries/${libraryId}/entries`,
+      { method: "POST", token, ...jsonBody(details) },
+    );
+    return result.entry;
+  },
+  updateCommunityEntry: async (token, communityId, libraryId, entryId, updates) => {
+    const result = await request(
+      libraryBase,
+      `/api/libraries/communities/${communityId}/libraries/${libraryId}/entries/${entryId}`,
+      { method: "PATCH", token, ...jsonBody(updates) },
+    );
+    return result.entry;
+  },
+  deleteCommunityEntry: (token, communityId, libraryId, entryId) => request(
+    libraryBase,
+    `/api/libraries/communities/${communityId}/libraries/${libraryId}/entries/${entryId}`,
+    { method: "DELETE", token },
+  ),
 };
 
 export const networkApi = {
@@ -217,6 +267,11 @@ export const networkApi = {
     networkBase,
     "/api/network/notifications/read-all",
     { method: "PATCH", token },
+  ),
+  clearAllNotifications: (token) => request(
+    networkBase,
+    "/api/network/notifications/clear-all",
+    { method: "DELETE", token },
   ),
   discoverLibraries: async (token, ownerId) => {
     const query = ownerId ? `?ownerId=${encodeURIComponent(ownerId)}` : "";
@@ -325,6 +380,87 @@ export const chatApi = {
     const result = await request(chatBase, `/api/chat/conversations/${conversationId}/messages`, { token });
     return result.messages;
   },
+};
+
+export const communityApi = {
+  list: async (token) => (await request(chatBase, "/api/chat/communities", { token })).communities,
+  listPublic: async (token) => (await request(chatBase, "/api/chat/communities/public", { token })).communities,
+  get: async (token, communityId) => (await request(chatBase, `/api/chat/communities/${communityId}`, { token })).community,
+  create: async (token, details) => (await request(chatBase, "/api/chat/communities", {
+    method: "POST", token, ...jsonBody(details),
+  })).community,
+  join: async (token, communityId) => (await request(chatBase, `/api/chat/communities/${communityId}/join`, {
+    method: "POST", token,
+  })).community,
+  joinByCode: async (token, code) => (await request(chatBase, "/api/chat/communities/join-by-code", {
+    method: "POST", token, ...jsonBody({ code }),
+  })).community,
+  leave: (token, communityId) => request(chatBase, `/api/chat/communities/${communityId}/membership`, {
+    method: "DELETE", token,
+  }),
+  delete: (token, communityId) => request(chatBase, `/api/chat/communities/${communityId}`, {
+    method: "DELETE", token,
+  }),
+  getNotificationSettings: async (token, communityId) => (
+    await request(chatBase, `/api/chat/communities/${communityId}/notification-settings`, { token })
+  ).settings,
+  updateNotificationSettings: async (token, communityId, isMuted) => (
+    await request(chatBase, `/api/chat/communities/${communityId}/notification-settings`, {
+      method: "PATCH", token, ...jsonBody({ isMuted }),
+    })
+  ).settings,
+  listMembers: async (token, communityId) => (
+    await request(chatBase, `/api/chat/communities/${communityId}/members`, { token })
+  ).members,
+  updateMemberRole: async (token, communityId, memberId, role) => (
+    await request(chatBase, `/api/chat/communities/${communityId}/members/${memberId}`, {
+      method: "PATCH", token, ...jsonBody({ role }),
+    })
+  ).member,
+  removeMember: (token, communityId, memberId) => request(
+    chatBase,
+    `/api/chat/communities/${communityId}/members/${memberId}`,
+    { method: "DELETE", token },
+  ),
+  listInvites: async (token, communityId) => (
+    await request(chatBase, `/api/chat/communities/${communityId}/invites`, { token })
+  ).invites,
+  createInvite: (token, communityId) => request(
+    chatBase,
+    `/api/chat/communities/${communityId}/invites`,
+    { method: "POST", token },
+  ),
+  revokeInvite: async (token, communityId, inviteId) => (
+    await request(chatBase, `/api/chat/communities/${communityId}/invites/${inviteId}`, {
+      method: "DELETE", token,
+    })
+  ).invite,
+  listAnnouncements: async (token, communityId) => (
+    await request(chatBase, `/api/chat/communities/${communityId}/announcements`, { token })
+  ).announcements,
+  createAnnouncement: async (token, communityId, details) => (
+    await request(chatBase, `/api/chat/communities/${communityId}/announcements`, {
+      method: "POST", token, ...jsonBody(details),
+    })
+  ).announcement,
+  updateAnnouncement: async (token, communityId, announcementId, details) => (
+    await request(chatBase, `/api/chat/communities/${communityId}/announcements/${announcementId}`, {
+      method: "PATCH", token, ...jsonBody(details),
+    })
+  ).announcement,
+  deleteAnnouncement: (token, communityId, announcementId) => request(
+    chatBase,
+    `/api/chat/communities/${communityId}/announcements/${announcementId}`,
+    { method: "DELETE", token },
+  ),
+  listMessages: async (token, communityId) => (
+    await request(chatBase, `/api/chat/communities/${communityId}/messages`, { token })
+  ).messages,
+  sendMessage: async (token, communityId, body) => (
+    await request(chatBase, `/api/chat/communities/${communityId}/messages`, {
+      method: "POST", token, ...jsonBody({ body }),
+    })
+  ).message,
 };
 
 export function getChatSocketUrl() {

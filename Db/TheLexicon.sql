@@ -520,6 +520,8 @@ BEGIN
         AccessRequestId INT NULL,
         ConversationId INT NULL,
         ChatRequestId INT NULL,
+        CommunityId INT NULL,
+        Details NVARCHAR(256) NULL,
         CreatedAt DATETIMEOFFSET(7) NOT NULL
             CONSTRAINT DF_Notifications_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
         ReadAt DATETIMEOFFSET(7) NULL,
@@ -537,6 +539,18 @@ GO
 IF COL_LENGTH(N'dbo.Notifications', N'ChatRequestId') IS NULL
 BEGIN
     ALTER TABLE dbo.Notifications ADD ChatRequestId INT NULL;
+END;
+GO
+
+IF COL_LENGTH(N'dbo.Notifications', N'CommunityId') IS NULL
+BEGIN
+    ALTER TABLE dbo.Notifications ADD CommunityId INT NULL;
+END;
+GO
+
+IF COL_LENGTH(N'dbo.Notifications', N'Details') IS NULL
+BEGIN
+    ALTER TABLE dbo.Notifications ADD Details NVARCHAR(256) NULL;
 END;
 GO
 
@@ -568,7 +582,7 @@ ALTER TABLE dbo.Notifications
     ADD CONSTRAINT CK_Notifications_Type CHECK
         (Type IN (N'FOLLOW', N'LIBRARY_ACCESS_REQUEST', N'LIBRARY_ACCESS_APPROVED',
                   N'LIBRARY_ACCESS_DECLINED', N'LIBRARY_SAVED', N'CHAT_MESSAGE', N'CHAT_REQUEST',
-                  N'CHAT_REQUEST_ACCEPTED', N'CHAT_REQUEST_DECLINED'));
+                  N'CHAT_REQUEST_ACCEPTED', N'CHAT_REQUEST_DECLINED', N'COMMUNITY_ACTIVITY'));
 GO
 
 IF NOT EXISTS
@@ -737,4 +751,272 @@ WHERE NOT EXISTS
     FROM dbo.Libraries AS l
     WHERE l.UserId = u.Id
 );
+GO
+
+/*
+    Community data is kept separate from personal libraries and direct
+    conversations. Membership and role checks are performed on every request.
+*/
+IF OBJECT_ID(N'dbo.Communities', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.Communities
+    (
+        Id INT IDENTITY(1,1) NOT NULL,
+        Name NVARCHAR(100) NOT NULL,
+        Genre NVARCHAR(100) NOT NULL,
+        Description NVARCHAR(1000) NULL,
+        Privacy NVARCHAR(16) NOT NULL
+            CONSTRAINT DF_Communities_Privacy DEFAULT (N'PUBLIC'),
+        OwnerUserId INT NOT NULL,
+        CreatedAt DATETIMEOFFSET(7) NOT NULL
+            CONSTRAINT DF_Communities_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        UpdatedAt DATETIMEOFFSET(7) NOT NULL
+            CONSTRAINT DF_Communities_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        CONSTRAINT PK_Communities PRIMARY KEY CLUSTERED (Id),
+        CONSTRAINT FK_Communities_Owner FOREIGN KEY (OwnerUserId)
+            REFERENCES dbo.Users (Id),
+        CONSTRAINT CK_Communities_Privacy CHECK (Privacy IN (N'PUBLIC', N'PRIVATE'))
+    );
+END;
+GO
+
+IF OBJECT_ID(N'dbo.CommunityMemberships', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.CommunityMemberships
+    (
+        CommunityId INT NOT NULL,
+        UserId INT NOT NULL,
+        Role NVARCHAR(16) NOT NULL
+            CONSTRAINT DF_CommunityMemberships_Role DEFAULT (N'MEMBER'),
+        JoinedAt DATETIMEOFFSET(7) NOT NULL
+            CONSTRAINT DF_CommunityMemberships_JoinedAt DEFAULT (SYSDATETIMEOFFSET()),
+        CONSTRAINT PK_CommunityMemberships PRIMARY KEY (CommunityId, UserId),
+        CONSTRAINT FK_CommunityMemberships_Community FOREIGN KEY (CommunityId)
+            REFERENCES dbo.Communities (Id) ON DELETE CASCADE,
+        CONSTRAINT FK_CommunityMemberships_User FOREIGN KEY (UserId)
+            REFERENCES dbo.Users (Id) ON DELETE CASCADE,
+        CONSTRAINT CK_CommunityMemberships_Role CHECK (Role IN (N'OWNER', N'ADMIN', N'MEMBER'))
+    );
+END;
+GO
+
+IF OBJECT_ID(N'dbo.CommunityInvites', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.CommunityInvites
+    (
+        Id INT IDENTITY(1,1) NOT NULL,
+        CommunityId INT NOT NULL,
+        CreatedByUserId INT NOT NULL,
+        CodeHash CHAR(64) NOT NULL,
+        CodePrefix NVARCHAR(16) NULL,
+        ExpiresAt DATETIMEOFFSET(7) NULL,
+        RevokedAt DATETIMEOFFSET(7) NULL,
+        UsedAt DATETIMEOFFSET(7) NULL,
+        CreatedAt DATETIMEOFFSET(7) NOT NULL
+            CONSTRAINT DF_CommunityInvites_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        CONSTRAINT PK_CommunityInvites PRIMARY KEY CLUSTERED (Id),
+        CONSTRAINT UQ_CommunityInvites_CodeHash UNIQUE (CodeHash),
+        CONSTRAINT FK_CommunityInvites_Community FOREIGN KEY (CommunityId)
+            REFERENCES dbo.Communities (Id) ON DELETE CASCADE,
+        CONSTRAINT FK_CommunityInvites_Creator FOREIGN KEY (CreatedByUserId)
+            REFERENCES dbo.Users (Id)
+    );
+END;
+GO
+
+IF OBJECT_ID(N'dbo.CommunityAnnouncements', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.CommunityAnnouncements
+    (
+        Id INT IDENTITY(1,1) NOT NULL,
+        CommunityId INT NOT NULL,
+        AuthorUserId INT NOT NULL,
+        Title NVARCHAR(200) NOT NULL,
+        Body NVARCHAR(MAX) NOT NULL,
+        CreatedAt DATETIMEOFFSET(7) NOT NULL
+            CONSTRAINT DF_CommunityAnnouncements_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        UpdatedAt DATETIMEOFFSET(7) NOT NULL
+            CONSTRAINT DF_CommunityAnnouncements_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        CONSTRAINT PK_CommunityAnnouncements PRIMARY KEY CLUSTERED (Id),
+        CONSTRAINT FK_CommunityAnnouncements_Community FOREIGN KEY (CommunityId)
+            REFERENCES dbo.Communities (Id) ON DELETE CASCADE,
+        CONSTRAINT FK_CommunityAnnouncements_Author FOREIGN KEY (AuthorUserId)
+            REFERENCES dbo.Users (Id),
+        CONSTRAINT CK_CommunityAnnouncements_Title CHECK (LEN(LTRIM(RTRIM(Title))) > 0),
+        CONSTRAINT CK_CommunityAnnouncements_Body CHECK (LEN(LTRIM(RTRIM(Body))) > 0)
+    );
+END;
+GO
+
+IF OBJECT_ID(N'dbo.CommunityChatMessages', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.CommunityChatMessages
+    (
+        Id BIGINT IDENTITY(1,1) NOT NULL,
+        CommunityId INT NOT NULL,
+        SenderUserId INT NOT NULL,
+        Body NVARCHAR(4000) NOT NULL,
+        CreatedAt DATETIMEOFFSET(7) NOT NULL
+            CONSTRAINT DF_CommunityChatMessages_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        CONSTRAINT PK_CommunityChatMessages PRIMARY KEY CLUSTERED (Id),
+        CONSTRAINT FK_CommunityChatMessages_Community FOREIGN KEY (CommunityId)
+            REFERENCES dbo.Communities (Id) ON DELETE CASCADE,
+        CONSTRAINT FK_CommunityChatMessages_Sender FOREIGN KEY (SenderUserId)
+            REFERENCES dbo.Users (Id),
+        CONSTRAINT CK_CommunityChatMessages_Body CHECK (LEN(LTRIM(RTRIM(Body))) > 0)
+    );
+END;
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1 FROM sys.indexes
+    WHERE object_id = OBJECT_ID(N'dbo.CommunityChatMessages')
+      AND name = N'IX_CommunityChatMessages_CommunityId_Id'
+)
+BEGIN
+    CREATE INDEX IX_CommunityChatMessages_CommunityId_Id
+        ON dbo.CommunityChatMessages (CommunityId, Id DESC);
+END;
+GO
+
+IF OBJECT_ID(N'dbo.CommunitySharedLibraries', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.CommunitySharedLibraries
+    (
+        Id INT IDENTITY(1,1) NOT NULL,
+        CommunityId INT NOT NULL,
+        Name NVARCHAR(100) NOT NULL,
+        Description NVARCHAR(500) NULL,
+        ModelKey NVARCHAR(32) NULL,
+        CreatedByUserId INT NOT NULL,
+        CreatedAt DATETIMEOFFSET(7) NOT NULL
+            CONSTRAINT DF_CommunitySharedLibraries_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        UpdatedAt DATETIMEOFFSET(7) NOT NULL
+            CONSTRAINT DF_CommunitySharedLibraries_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        CONSTRAINT PK_CommunitySharedLibraries PRIMARY KEY CLUSTERED (Id),
+        CONSTRAINT FK_CommunitySharedLibraries_Community FOREIGN KEY (CommunityId)
+            REFERENCES dbo.Communities (Id) ON DELETE CASCADE,
+        CONSTRAINT FK_CommunitySharedLibraries_Creator FOREIGN KEY (CreatedByUserId)
+            REFERENCES dbo.Users (Id),
+        CONSTRAINT CK_CommunitySharedLibraries_Name CHECK (LEN(LTRIM(RTRIM(Name))) > 0),
+        CONSTRAINT CK_CommunitySharedLibraries_ModelKey CHECK
+            (ModelKey IS NULL OR ModelKey IN (N'words', N'phrases', N'reading-spaces', N'poetry', N'research'))
+    );
+END;
+GO
+
+IF COL_LENGTH(N'dbo.CommunitySharedLibraries', N'ModelKey') IS NULL
+BEGIN
+    ALTER TABLE dbo.CommunitySharedLibraries ADD ModelKey NVARCHAR(32) NULL;
+END;
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1 FROM sys.check_constraints
+    WHERE parent_object_id = OBJECT_ID(N'dbo.CommunitySharedLibraries')
+      AND name = N'CK_CommunitySharedLibraries_ModelKey'
+)
+BEGIN
+    ALTER TABLE dbo.CommunitySharedLibraries
+        ADD CONSTRAINT CK_CommunitySharedLibraries_ModelKey CHECK
+            (ModelKey IS NULL OR ModelKey IN (N'words', N'phrases', N'reading-spaces', N'poetry', N'research'));
+END;
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1 FROM sys.indexes
+    WHERE object_id = OBJECT_ID(N'dbo.CommunitySharedLibraries')
+      AND name = N'UX_CommunitySharedLibraries_Community_ModelKey'
+)
+BEGIN
+    CREATE UNIQUE INDEX UX_CommunitySharedLibraries_Community_ModelKey
+        ON dbo.CommunitySharedLibraries (CommunityId, ModelKey)
+        WHERE ModelKey IS NOT NULL;
+END;
+GO
+
+IF OBJECT_ID(N'dbo.CommunitySharedLibraryEntries', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.CommunitySharedLibraryEntries
+    (
+        Id INT IDENTITY(1,1) NOT NULL,
+        LibraryId INT NOT NULL,
+        ContributorUserId INT NOT NULL,
+        EntryType NVARCHAR(32) NOT NULL
+            CONSTRAINT DF_CommunitySharedLibraryEntries_EntryType DEFAULT (N'WORD'),
+        Title NVARCHAR(255) NOT NULL,
+        Content NVARCHAR(MAX) NULL,
+        Url NVARCHAR(2048) NULL,
+        CreatedAt DATETIMEOFFSET(7) NOT NULL
+            CONSTRAINT DF_CommunitySharedLibraryEntries_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        UpdatedAt DATETIMEOFFSET(7) NOT NULL
+            CONSTRAINT DF_CommunitySharedLibraryEntries_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        CONSTRAINT PK_CommunitySharedLibraryEntries PRIMARY KEY CLUSTERED (Id),
+        CONSTRAINT FK_CommunitySharedLibraryEntries_Library FOREIGN KEY (LibraryId)
+            REFERENCES dbo.CommunitySharedLibraries (Id) ON DELETE CASCADE,
+        CONSTRAINT FK_CommunitySharedLibraryEntries_Contributor FOREIGN KEY (ContributorUserId)
+            REFERENCES dbo.Users (Id),
+        CONSTRAINT CK_CommunitySharedLibraryEntries_Title CHECK (LEN(LTRIM(RTRIM(Title))) > 0),
+        CONSTRAINT CK_CommunitySharedLibraryEntries_EntryType CHECK
+            (EntryType IN (N'WORD', N'PHRASE', N'IDIOM', N'BOOK', N'PAPER', N'ARTICLE',
+                N'COLLECTION', N'POEM', N'POETIC_DEVICE', N'PLAY', N'CUSTOM_MODEL', N'THEORY', N'RESEARCH'))
+    );
+END;
+GO
+
+IF COL_LENGTH(N'dbo.CommunitySharedLibraryEntries', N'EntryType') IS NULL
+BEGIN
+    ALTER TABLE dbo.CommunitySharedLibraryEntries
+        ADD EntryType NVARCHAR(32) NOT NULL
+            CONSTRAINT DF_CommunitySharedLibraryEntries_EntryType DEFAULT (N'WORD') WITH VALUES;
+END;
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1 FROM sys.check_constraints
+    WHERE parent_object_id = OBJECT_ID(N'dbo.CommunitySharedLibraryEntries')
+      AND name = N'CK_CommunitySharedLibraryEntries_EntryType'
+)
+BEGIN
+    ALTER TABLE dbo.CommunitySharedLibraryEntries
+        ADD CONSTRAINT CK_CommunitySharedLibraryEntries_EntryType CHECK
+            (EntryType IN (N'WORD', N'PHRASE', N'IDIOM', N'BOOK', N'PAPER', N'ARTICLE',
+                N'COLLECTION', N'POEM', N'POETIC_DEVICE', N'PLAY', N'CUSTOM_MODEL', N'THEORY', N'RESEARCH'));
+END;
+GO
+
+IF OBJECT_ID(N'dbo.CommunityNotificationSettings', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.CommunityNotificationSettings
+    (
+        CommunityId INT NOT NULL,
+        UserId INT NOT NULL,
+        IsMuted BIT NOT NULL
+            CONSTRAINT DF_CommunityNotificationSettings_IsMuted DEFAULT (0),
+        UpdatedAt DATETIMEOFFSET(7) NOT NULL
+            CONSTRAINT DF_CommunityNotificationSettings_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        CONSTRAINT PK_CommunityNotificationSettings PRIMARY KEY (CommunityId, UserId),
+        CONSTRAINT FK_CommunityNotificationSettings_Community FOREIGN KEY (CommunityId)
+            REFERENCES dbo.Communities (Id) ON DELETE CASCADE,
+        CONSTRAINT FK_CommunityNotificationSettings_User FOREIGN KEY (UserId)
+            REFERENCES dbo.Users (Id) ON DELETE CASCADE
+    );
+END;
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1 FROM sys.foreign_keys
+    WHERE parent_object_id = OBJECT_ID(N'dbo.Notifications')
+      AND name = N'FK_Notifications_Community'
+)
+BEGIN
+    ALTER TABLE dbo.Notifications
+        ADD CONSTRAINT FK_Notifications_Community FOREIGN KEY (CommunityId)
+            REFERENCES dbo.Communities (Id) ON DELETE CASCADE;
+END;
 GO

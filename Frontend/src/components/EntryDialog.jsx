@@ -9,6 +9,7 @@ export default function EntryDialog({
   allowedCategories,
   onClose,
   onSave,
+  saveLabel = "Save to my library",
 }) {
   const [category, setCategory] = useState(initialEntry?.category ?? initialCategory);
   const [title, setTitle] = useState(initialEntry?.title ?? "");
@@ -104,7 +105,7 @@ export default function EntryDialog({
           </label>
           {error && <p className="form-error" role="alert">{error}</p>}
           <button className="button button-primary dialog-submit" disabled={busy}>
-            {busy ? "Saving…" : initialEntry ? "Save changes" : "Save to my library"}
+            {busy ? "Saving…" : initialEntry ? "Save changes" : saveLabel}
             {!busy && <ArrowRight size={16} />}
           </button>
         </form>

@@ -6,6 +6,8 @@ export function WorkspaceEntryCard({
   onOpen,
   onEdit,
   onDelete,
+  deleting = false,
+  attribution,
 }) {
   const Icon = category.icon;
   const isReadingSpace = ["BOOK", "PAPER", "ARTICLE"].includes(entry.entryType);
@@ -20,28 +22,33 @@ export function WorkspaceEntryCard({
           {category.label}
         </span>
         <div className="entry-actions">
-          <button
-            className="entry-action"
-            onClick={(event) => {
-              event.stopPropagation();
-              onEdit();
-            }}
-            aria-label={`Edit ${entry.title}`}
-            title="Edit"
-          >
-            <Settings2 size={15} />
-          </button>
-          <button
-            className="entry-action entry-delete"
-            onClick={(event) => {
-              event.stopPropagation();
-              if (window.confirm(`Remove “${entry.title}”?`)) onDelete();
-            }}
-            aria-label={`Delete ${entry.title}`}
-            title="Delete"
-          >
-            ×
-          </button>
+          {onEdit && (
+            <button
+              className="entry-action"
+              onClick={(event) => {
+                event.stopPropagation();
+                onEdit();
+              }}
+              aria-label={`Edit ${entry.title}`}
+              title="Edit"
+            >
+              <Settings2 size={15} />
+            </button>
+          )}
+          {onDelete && (
+            <button
+              className="entry-action entry-delete"
+              disabled={deleting}
+              onClick={(event) => {
+                event.stopPropagation();
+                if (window.confirm(`Remove “${entry.title}”?`)) onDelete();
+              }}
+              aria-label={deleting ? `Removing ${entry.title}` : `Delete ${entry.title}`}
+              title={deleting ? "Removing…" : "Delete"}
+            >
+              {deleting ? "…" : "×"}
+            </button>
+          )}
         </div>
       </div>
       <h3>{entry.title}</h3>
@@ -52,6 +59,7 @@ export function WorkspaceEntryCard({
           A little space for your notes.
         </p>
       )}
+      {attribution && <small className="entry-attribution">{attribution}</small>}
       <div className="entry-card-bottom">
         {entry.url ? (
           <a

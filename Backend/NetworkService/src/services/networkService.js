@@ -73,6 +73,10 @@ export class NetworkService {
     await this.repository.markAllNotificationsRead(userId);
   }
 
+  async clearNotifications(userId) {
+    await this.repository.clearNotifications(userId);
+  }
+
   async follow(userId, targetId) {
     const target = readId(targetId, "userId");
     if (target === userId) throw new HttpError(400, "You cannot follow yourself.");

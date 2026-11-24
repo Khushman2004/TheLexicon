@@ -96,6 +96,30 @@ export function createApp(authenticationService, chatService) {
         if (typeof acknowledge === "function") acknowledge({ ok: false, error: error.message });
       }
     });
+    socket.on("joinCommunity", async (payload, acknowledge = () => {}) => {
+      try {
+        await assertSession(authenticationService, socket);
+        await chatService.getCommunity(userId, payload?.communityId);
+        await socket.join(`community:${payload.communityId}`);
+        if (typeof acknowledge === "function") acknowledge({ ok: true });
+      } catch (error) {
+        if (typeof acknowledge === "function") acknowledge({ ok: false, error: error.message });
+      }
+    });
+    socket.on("sendCommunityMessage", async (payload, acknowledge = () => {}) => {
+      try {
+        await assertSession(authenticationService, socket);
+        const message = await chatService.sendCommunityMessage(
+          userId,
+          payload?.communityId,
+          payload?.body,
+        );
+        io.to(`community:${payload.communityId}`).emit("newCommunityMessage", message);
+        if (typeof acknowledge === "function") acknowledge({ ok: true, message });
+      } catch (error) {
+        if (typeof acknowledge === "function") acknowledge({ ok: false, error: error.message });
+      }
+    });
     socket.on("disconnect", () => {
       const count = (onlineCounts.get(userId) ?? 1) - 1;
       if (count > 0) {

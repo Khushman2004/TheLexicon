@@ -64,6 +64,110 @@ export function createChatRoutes(authenticationService, chatService) {
     response.status(201).json({ message });
   });
 
+  router.get("/communities", async (request, response) => {
+    response.json({ communities: await chatService.listCommunities(request.userId) });
+  });
+  router.get("/communities/public", async (request, response) => {
+    response.json({ communities: await chatService.listPublicCommunities(request.userId) });
+  });
+  router.post("/communities", async (request, response) => {
+    response.status(201).json({ community: await chatService.createCommunity(request.userId, request.body) });
+  });
+  router.post("/communities/join-by-code", async (request, response) => {
+    response.json({ community: await chatService.joinByInvite(request.userId, request.body?.code) });
+  });
+  router.get("/communities/:communityId", async (request, response) => {
+    response.json({ community: await chatService.getCommunity(request.userId, request.params.communityId) });
+  });
+  router.post("/communities/:communityId/join", async (request, response) => {
+    response.json({ community: await chatService.joinCommunity(request.userId, request.params.communityId) });
+  });
+  router.delete("/communities/:communityId/membership", async (request, response) => {
+    await chatService.leaveCommunity(request.userId, request.params.communityId);
+    response.status(204).send();
+  });
+  router.delete("/communities/:communityId", async (request, response) => {
+    await chatService.deleteCommunity(request.userId, request.params.communityId);
+    response.status(204).send();
+  });
+  router.get("/communities/:communityId/notification-settings", async (request, response) => {
+    response.json({
+      settings: await chatService.getCommunityNotificationSettings(
+        request.userId,
+        request.params.communityId,
+      ),
+    });
+  });
+  router.patch("/communities/:communityId/notification-settings", async (request, response) => {
+    response.json({
+      settings: await chatService.updateCommunityNotificationSettings(
+        request.userId,
+        request.params.communityId,
+        request.body,
+      ),
+    });
+  });
+  router.get("/communities/:communityId/members", async (request, response) => {
+    response.json({ members: await chatService.listMembers(request.userId, request.params.communityId) });
+  });
+  router.patch("/communities/:communityId/members/:memberId", async (request, response) => {
+    response.json({ member: await chatService.updateMemberRole(
+      request.userId,
+      request.params.communityId,
+      request.params.memberId,
+      request.body?.role,
+    ) });
+  });
+  router.delete("/communities/:communityId/members/:memberId", async (request, response) => {
+    await chatService.removeMember(request.userId, request.params.communityId, request.params.memberId);
+    response.status(204).send();
+  });
+  router.get("/communities/:communityId/invites", async (request, response) => {
+    response.json({ invites: await chatService.listInvites(request.userId, request.params.communityId) });
+  });
+  router.post("/communities/:communityId/invites", async (request, response) => {
+    response.status(201).json(await chatService.createInvite(request.userId, request.params.communityId));
+  });
+  router.delete("/communities/:communityId/invites/:inviteId", async (request, response) => {
+    response.json({ invite: await chatService.revokeInvite(
+      request.userId,
+      request.params.communityId,
+      request.params.inviteId,
+    ) });
+  });
+  router.get("/communities/:communityId/announcements", async (request, response) => {
+    response.json({ announcements: await chatService.listAnnouncements(request.userId, request.params.communityId) });
+  });
+  router.post("/communities/:communityId/announcements", async (request, response) => {
+    response.status(201).json({
+      announcement: await chatService.createAnnouncement(request.userId, request.params.communityId, request.body),
+    });
+  });
+  router.patch("/communities/:communityId/announcements/:announcementId", async (request, response) => {
+    response.json({
+      announcement: await chatService.updateAnnouncement(
+        request.userId,
+        request.params.communityId,
+        request.params.announcementId,
+        request.body,
+      ),
+    });
+  });
+  router.delete("/communities/:communityId/announcements/:announcementId", async (request, response) => {
+    await chatService.deleteAnnouncement(request.userId, request.params.communityId, request.params.announcementId);
+    response.status(204).send();
+  });
+  router.get("/communities/:communityId/messages", async (request, response) => {
+    response.json({
+      messages: await chatService.listCommunityMessages(request.userId, request.params.communityId, request.query.before),
+    });
+  });
+  router.post("/communities/:communityId/messages", async (request, response) => {
+    response.status(201).json({
+      message: await chatService.sendCommunityMessage(request.userId, request.params.communityId, request.body?.body),
+    });
+  });
+
   router.use((_request, _response, next) => next(new HttpError(404, "Endpoint not found.")));
   return router;
 }

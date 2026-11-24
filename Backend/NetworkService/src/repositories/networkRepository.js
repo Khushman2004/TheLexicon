@@ -181,6 +181,8 @@ export class NetworkRepository {
       .input("userId", sql.Int, userId)
       .query(`
         SELECT TOP (100) n.Id AS id, n.Type AS type, n.LibraryId AS libraryId,
+          n.CommunityId AS communityId, n.Details AS details,
+          community.Name AS communityName,
           n.AccessRequestId AS accessRequestId,
           COALESCE(n.ConversationId, chatRequest.ConversationId) AS conversationId,
           n.ChatRequestId AS chatRequestId, chatRequest.Status AS chatRequestStatus,
@@ -190,6 +192,7 @@ export class NetworkRepository {
         FROM dbo.Notifications AS n
         INNER JOIN dbo.Users AS u ON u.Id = n.ActorUserId
         LEFT JOIN dbo.Libraries AS l ON l.Id = n.LibraryId
+        LEFT JOIN dbo.Communities AS community ON community.Id = n.CommunityId
         LEFT JOIN dbo.ChatRequests AS chatRequest ON chatRequest.Id = n.ChatRequestId
         WHERE n.RecipientUserId = @userId
         ORDER BY n.CreatedAt DESC, n.Id DESC;
@@ -225,6 +228,14 @@ export class NetworkRepository {
         UPDATE dbo.Notifications
         SET ReadAt = SYSDATETIMEOFFSET()
         WHERE RecipientUserId = @userId AND ReadAt IS NULL;`);
+  }
+
+  async clearNotifications(userId) {
+    await pool.request()
+      .input("userId", sql.Int, userId)
+      .query(`
+        DELETE FROM dbo.Notifications
+        WHERE RecipientUserId = @userId;`);
   }
 
   async listPublicLibraries(viewerId, ownerId = null) {

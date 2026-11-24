@@ -22,6 +22,10 @@ export function createNetworkRoutes(authenticationService, networkService) {
     await networkService.markAllNotificationsRead(request.userId);
     response.status(204).end();
   });
+  router.delete("/notifications/clear-all", async (request, response) => {
+    await networkService.clearNotifications(request.userId);
+    response.status(204).end();
+  });
   router.patch("/notifications/:notificationId/read", async (request, response) => {
     const updated = await networkService.markNotificationRead(
       request.userId,

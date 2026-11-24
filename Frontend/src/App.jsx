@@ -35,6 +35,7 @@ import LibraryInvitePage from "./pages/LibraryInvitePage.jsx";
 import ChatPage from "./pages/ChatPage.jsx";
 import ConnectionsPage from "./pages/ConnectionsPage.jsx";
 import NotificationsPage from "./pages/NotificationsPage.jsx";
+import CommunityPage from "./pages/CommunityPage.jsx";
 
 const TOKEN_KEY = "the-lexicon-token";
 
@@ -256,6 +257,7 @@ function AppSession() {
           </Link>
           <nav className="social-nav" aria-label="Your network">
             <Link className={`category-nav-item ${location.pathname === "/network" ? "selected" : ""}`} to="/network" onClick={() => setMobileNavOpen(false)}><Users size={16} /><span>People & libraries</span></Link>
+            <Link className={`category-nav-item ${location.pathname.startsWith("/community") ? "selected" : ""}`} to="/community" onClick={() => setMobileNavOpen(false)}><Users size={16} /><span>Community</span></Link>
             <Link className={`category-nav-item ${location.pathname === "/saved" ? "selected" : ""}`} to="/saved" onClick={() => setMobileNavOpen(false)}><Bookmark size={16} /><span>Saved shelves</span></Link>
             <Link className={`category-nav-item ${location.pathname.startsWith("/messages") ? "selected" : ""}`} to="/messages" onClick={() => setMobileNavOpen(false)}><MessageCircle size={16} /><span>Messages</span></Link>
             <Link className={`category-nav-item notification-nav-item ${location.pathname.startsWith("/notifications") ? "selected" : ""}`} to="/notifications" onClick={() => setMobileNavOpen(false)}>
@@ -329,7 +331,7 @@ function AppSession() {
           <button className="icon-button mobile-menu" onClick={() => setMobileNavOpen(true)} aria-label="Open menu"><Menu size={20} /></button>
           <div className="breadcrumb">
             <Link to="/libraries">MY SPACE</Link><ChevronRight size={13} />
-            <strong>{activeLibrary?.name ?? (location.pathname.startsWith("/discover") ? "Discover" : "Your libraries")}</strong>
+            <strong>{activeLibrary?.name ?? (location.pathname.startsWith("/community") ? "Community" : location.pathname.startsWith("/discover") ? "Discover" : "Your libraries")}</strong>
           </div>
           <div className="topbar-right">
             <span className="date-display">{new Intl.DateTimeFormat("en", { weekday: "long", month: "long", day: "numeric" }).format(new Date())}</span>
@@ -348,6 +350,8 @@ function AppSession() {
 
         <Routes>
           <Route path="/libraries" element={<LibrariesPage libraries={libraries} loading={loadingLibraries} onCreate={() => setDialog({ type: "library" })} />} />
+          <Route path="/community" element={<CommunityPage token={token} currentUser={user} />} />
+          <Route path="/community/:communityId" element={<CommunityPage token={token} currentUser={user} />} />
           <Route path="/network" element={<NetworkPage token={token} />} />
           <Route path="/notifications" element={<NotificationsPage token={token} onUnreadCountChange={setUnreadNotifications} />} />
           <Route path="/saved" element={<SavedLibrariesPage token={token} />} />

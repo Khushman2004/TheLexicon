@@ -21,6 +21,10 @@ const SECTION_CHILD_TYPES = new Map([
   [ENTRY_TYPES.PHRASES_SECTION, new Set([ENTRY_TYPES.PHRASE, ENTRY_TYPES.IDIOM])],
   [ENTRY_TYPES.THEORIES_SECTION, new Set([ENTRY_TYPES.THEORY])],
 ]);
+const COMMUNITY_ENTRY_TYPES = new Set(
+  Object.values(ENTRY_TYPES).filter((entryType) => !READING_SECTION_TYPES.includes(entryType)),
+);
+
 export class LibraryService {
   constructor(libraryRepository) {
     this.libraryRepository = libraryRepository;
@@ -272,6 +276,123 @@ export class LibraryService {
     }
   }
 
+  async listCommunityLibraries(userId, communityId) {
+    const libraries = await this.libraryRepository.listCommunityLibraries(
+      userId,
+      readId(communityId, "communityId"),
+    );
+    if (libraries === null) throw new HttpError(404, "Community not found or you are not a member.");
+    return libraries;
+  }
+
+  async createCommunityLibrary(userId, communityId, body) {
+    const name = readCommunityName(body?.name);
+    const description = readCommunityDescription(body?.description);
+    const library = await this.libraryRepository.createCommunityLibrary(
+      userId,
+      readId(communityId, "communityId"),
+      name,
+      description,
+    );
+    if (!library) throw new HttpError(404, "Community not found or you are not a member.");
+    return library;
+  }
+
+  async updateCommunityLibrary(userId, communityId, libraryId, body) {
+    const name = Object.hasOwn(body ?? {}, "name") ? readCommunityName(body.name) : null;
+    const description = Object.hasOwn(body ?? {}, "description")
+      ? readCommunityDescription(body.description)
+      : null;
+    if (!name && !description) throw new HttpError(400, "Provide a name or description.");
+    const library = await this.libraryRepository.updateCommunityLibrary(
+      userId,
+      readId(communityId, "communityId"),
+      readId(libraryId, "libraryId"),
+      name,
+      description,
+    );
+    if (!library) throw new HttpError(403, "Library not found or you do not have permission.");
+    return library;
+  }
+
+  async deleteCommunityLibrary(userId, communityId, libraryId) {
+    const deleted = await this.libraryRepository.deleteCommunityLibrary(
+      userId,
+      readId(communityId, "communityId"),
+      readId(libraryId, "libraryId"),
+    );
+    if (!deleted) throw new HttpError(403, "Library not found or you do not have permission.");
+  }
+
+  async listCommunityEntries(userId, communityId, libraryId) {
+    const entries = await this.libraryRepository.listCommunityEntries(
+      userId,
+      readId(communityId, "communityId"),
+      readId(libraryId, "libraryId"),
+    );
+    if (entries === null) throw new HttpError(404, "Shared library not found or community access denied.");
+    return entries;
+  }
+
+  async createCommunityEntry(userId, communityId, libraryId, body) {
+    const community = readId(communityId, "communityId");
+    const library = readId(libraryId, "libraryId");
+    const sharedLibrary = await this.libraryRepository.findCommunityLibrary(userId, community, library);
+    if (!sharedLibrary) throw new HttpError(404, "Shared library not found or community access denied.");
+
+    const model = findLibraryModel(sharedLibrary.modelKey);
+    const entryType = body?.entryType ?? model?.entryTypes[0] ?? ENTRY_TYPES.WORD;
+    if (typeof entryType !== "string" || !COMMUNITY_ENTRY_TYPES.has(entryType)) {
+      throw new HttpError(400, "entryType must be a supported library entry type.");
+    }
+    if (model && !model.entryTypes.includes(entryType)) {
+      throw new HttpError(400, "entryType does not belong to this community library model.");
+    }
+
+    const title = readCommunityName(body?.title, "Entry title", 255);
+    const content = readOptionalText(body?.content, "content", 10000);
+    const url = readUrl(body?.url);
+    const entry = await this.libraryRepository.createCommunityEntry(
+      userId,
+      community,
+      library,
+      entryType,
+      title,
+      content,
+      url,
+    );
+    if (!entry) throw new HttpError(404, "Shared library not found or community access denied.");
+    return entry;
+  }
+
+  async updateCommunityEntry(userId, communityId, libraryId, entryId, body) {
+    const title = Object.hasOwn(body ?? {}, "title") ? readCommunityName(body.title, "Entry title", 255) : null;
+    const content = Object.hasOwn(body ?? {}, "content") ? readOptionalText(body.content, "content", 10000) : null;
+    const url = Object.hasOwn(body ?? {}, "url") ? readUrl(body.url) : null;
+    if (!title && content === null && url === null) throw new HttpError(400, "Provide a title, content, or URL.");
+    const entry = await this.libraryRepository.updateCommunityEntry(
+      userId,
+      readId(communityId, "communityId"),
+      readId(libraryId, "libraryId"),
+      readId(entryId, "entryId"),
+      title,
+      content,
+      url,
+    );
+    if (!entry) throw new HttpError(403, "Entry not found or you do not have permission.");
+    return entry;
+  }
+
+  async deleteCommunityEntry(userId, communityId, libraryId, entryId) {
+    const deleted = await this.libraryRepository.deleteCommunityEntry(
+      userId,
+      readId(communityId, "communityId"),
+      readId(libraryId, "libraryId"),
+      readId(entryId, "entryId"),
+    );
+    if (!deleted) throw new HttpError(403, "Entry not found or you do not have permission.");
+  }
+
   async validateParent(userId, libraryId, parentId) {
     if (parentId === null) return;
     const parent = await this.libraryRepository.findAnyEntryForUser(userId, libraryId, parentId);
@@ -349,4 +470,19 @@ function readId(value, label) {
     throw new HttpError(400, `${label} must be a positive integer.`);
   }
   return id;
+}
+
+function readCommunityName(value, label = "Library name", maxLength = 100) {
+  if (typeof value !== "string" || !value.trim() || value.trim().length > maxLength) {
+    throw new HttpError(400, `${label} must be a non-empty string of at most ${maxLength} characters.`);
+  }
+  return value.trim();
+}
+
+function readCommunityDescription(value) {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "string" || value.length > 500) {
+    throw new HttpError(400, "Description must be a string of at most 500 characters.");
+  }
+  return value.trim();
 }
