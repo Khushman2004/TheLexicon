@@ -2,10 +2,12 @@ import express from "express";
 import { ENDPOINTS } from "./config/endpoints.js";
 import { createAuthRoutes } from "./routes/authRoutes.js";
 import { HttpError } from "./controllers/authController.js";
+import { cors } from "./middleware/cors.js";
 
 export function createApp(authService) {
   const app = express();
 
+  app.use(cors);
   app.use(express.json({ limit: "10kb" }));
 
   app.get(ENDPOINTS.HEALTH, (_request, response) => {

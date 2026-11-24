@@ -1,7 +1,29 @@
 import { HttpError } from "../utils/httpError.js";
+import { findLibraryModel } from "../config/libraryModels.js";
+import { ENTRY_TYPES, READING_SECTION_TYPES, READING_SPACE_TYPES } from "../config/entryTypes.js";
 
-const BOOK_CHILD_TYPES = new Set(["WORD", "PHRASE", "IDIOM"]);
-const COLLECTION_CHILD_TYPES = new Set(["WORD", "PHRASE", "IDIOM", "BOOK", "ARTICLE"]);
+const COLLECTION_CHILD_TYPES = new Set([
+  ENTRY_TYPES.WORD,
+  ENTRY_TYPES.PHRASE,
+  ENTRY_TYPES.IDIOM,
+  ENTRY_TYPES.BOOK,
+  ENTRY_TYPES.PAPER,
+  ENTRY_TYPES.ARTICLE,
+  ENTRY_TYPES.POEM,
+  ENTRY_TYPES.POETIC_DEVICE,
+  ENTRY_TYPES.PLAY,
+  ENTRY_TYPES.CUSTOM_MODEL,
+  ENTRY_TYPES.THEORY,
+  ENTRY_TYPES.RESEARCH,
+]);
+const SECTION_CHILD_TYPES = new Map([
+  [ENTRY_TYPES.WORDS_SECTION, new Set([ENTRY_TYPES.WORD])],
+  [ENTRY_TYPES.PHRASES_SECTION, new Set([ENTRY_TYPES.PHRASE, ENTRY_TYPES.IDIOM])],
+  [ENTRY_TYPES.THEORIES_SECTION, new Set([ENTRY_TYPES.THEORY])],
+]);
+const COMMUNITY_ENTRY_TYPES = new Set(
+  Object.values(ENTRY_TYPES).filter((entryType) => !READING_SECTION_TYPES.includes(entryType)),
+);
 
 export class LibraryService {
   constructor(libraryRepository) {
@@ -23,13 +45,102 @@ export class LibraryService {
   }
 
   async updateLibrary(userId, libraryId, body) {
-    const library = await this.libraryRepository.updateName(
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      throw new HttpError(400, "Request body must be a JSON object.");
+    }
+    const updates = {};
+    if (Object.hasOwn(body, "name")) {
+      updates.name = readName(body, "name", "Library name", 100);
+    }
+    if (Object.hasOwn(body, "isPublic")) {
+      updates.isPublic = readBoolean(body.isPublic, "isPublic");
+    }
+    if (!Object.keys(updates).length) {
+      throw new HttpError(400, "Provide a library name or visibility to update.");
+    }
+
+    const library = await this.libraryRepository.update(
       userId,
       readId(libraryId, "libraryId"),
-      readName(body, "name", "Library name", 100),
+      updates,
     );
     if (!library) throw new HttpError(404, "Library not found.");
     return library;
+  }
+
+  async listModels(userId, libraryId) {
+    const id = readId(libraryId, "libraryId");
+    await this.getLibrary(userId, id);
+    return this.libraryRepository.listModels(userId, id);
+  }
+
+  async updateModelVisibility(userId, libraryId, modelKey, body) {
+    const id = readId(libraryId, "libraryId");
+    await this.getLibrary(userId, id);
+    if (!findLibraryModel(modelKey)) throw new HttpError(404, "Library model not found.");
+    if (!body || typeof body !== "object" || Array.isArray(body)
+      || !Object.hasOwn(body, "isPublic")) {
+      throw new HttpError(400, "Provide an isPublic boolean.");
+    }
+
+    const model = await this.libraryRepository.updateModelVisibility(
+      userId,
+      id,
+      modelKey,
+      readBoolean(body.isPublic, "isPublic"),
+    );
+    if (!model) throw new HttpError(404, "Library model not found.");
+    return model;
+  }
+
+  async listPublicLibraries(userId) {
+    return this.libraryRepository.listPublic(userId);
+  }
+
+  async getPublicLibrary(libraryId) {
+    const id = readId(libraryId, "libraryId");
+    const library = await this.libraryRepository.findPublicLibrary(id);
+    if (!library) throw new HttpError(404, "Public library not found.");
+    const models = await this.libraryRepository.listPublicModels(id);
+    return { library, models };
+  }
+
+  async listPublicModelEntries(libraryId, modelKey, parentEntryId) {
+    const id = readId(libraryId, "libraryId");
+    if (!findLibraryModel(modelKey)) throw new HttpError(404, "Library model not found.");
+    const library = await this.libraryRepository.findPublicLibrary(id);
+    if (!library) throw new HttpError(404, "Public library not found.");
+    const models = await this.libraryRepository.listPublicModels(id);
+    if (!models.some((model) => model.modelKey === modelKey)) {
+      throw new HttpError(404, "Public library model not found.");
+    }
+    const parentId = parentEntryId === undefined
+      ? null
+      : readId(parentEntryId, "parentId");
+    return this.libraryRepository.listPublicEntries(id, modelKey, parentId);
+  }
+
+  async getAccessibleLibrary(userId, libraryId) {
+    const id = readId(libraryId, "libraryId");
+    const library = await this.libraryRepository.findAccessibleLibrary(userId, id);
+    if (!library) throw new HttpError(404, "Shared library not found.");
+    const models = await this.libraryRepository.listAccessibleModels(userId, id);
+    return { library, models };
+  }
+
+  async listAccessibleModelEntries(userId, libraryId, modelKey, parentEntryId) {
+    const id = readId(libraryId, "libraryId");
+    if (!findLibraryModel(modelKey)) throw new HttpError(404, "Library model not found.");
+    const library = await this.libraryRepository.findAccessibleLibrary(userId, id);
+    if (!library) throw new HttpError(404, "Shared library not found.");
+    const models = await this.libraryRepository.listAccessibleModels(userId, id);
+    if (!models.some((model) => model.modelKey === modelKey)) {
+      throw new HttpError(404, "Shared library model not found.");
+    }
+    const parentId = parentEntryId === undefined
+      ? null
+      : readId(parentEntryId, "parentId");
+    return this.libraryRepository.listAccessibleEntries(userId, id, modelKey, parentId);
   }
 
   async listEntries(userId, libraryId, entryType, parentEntryId) {
@@ -39,15 +150,60 @@ export class LibraryService {
       ? null
       : readId(parentEntryId, "parentId");
 
-    if (parentId !== null) {
-      const parent = await this.libraryRepository.findAnyEntryForUser(userId, id, parentId);
-      if (!parent) throw new HttpError(404, "Parent entry not found.");
-      if (!["BOOK", "COLLECTION"].includes(parent.entryType)) {
-        throw new HttpError(400, "Only books and custom collections can contain entries.");
-      }
-    }
+    await this.validateParent(userId, id, parentId);
 
     return this.libraryRepository.listEntries(userId, id, entryType, parentId);
+  }
+
+  async listAllEntries(userId, libraryId, parentEntryId) {
+    const id = readId(libraryId, "libraryId");
+    await this.getLibrary(userId, id);
+    const parentId = parentEntryId === undefined
+      ? null
+      : readId(parentEntryId, "parentId");
+
+    await this.validateParent(userId, id, parentId);
+    return this.libraryRepository.listAllEntries(userId, id, parentId);
+  }
+
+  async listReadingSpaces(userId, libraryId) {
+    const id = readId(libraryId, "libraryId");
+    await this.getLibrary(userId, id);
+    return this.libraryRepository.listReadingSpaces(userId, id);
+  }
+
+  async createReadingSpace(userId, libraryId, body) {
+    const id = readId(libraryId, "libraryId");
+    await this.getLibrary(userId, id);
+    const readingSpaceType = body?.readingSpaceType;
+    if (!READING_SPACE_TYPES.includes(readingSpaceType)) {
+      throw new HttpError(400, "readingSpaceType must be BOOK, PAPER, or ARTICLE.");
+    }
+
+    const entry = readEntry(body, readingSpaceType);
+    if (entry.parentEntryId !== null) {
+      throw new HttpError(400, "Reading spaces must be created at the library root.");
+    }
+
+    const created = await this.libraryRepository.createEntry(userId, id, entry);
+    if (!created) throw new HttpError(404, "Library not found.");
+    const sections = await this.listReadingSpaceSections(userId, id, created.id);
+    return { readingSpace: created, sections };
+  }
+
+  async listReadingSpaceSections(userId, libraryId, readingSpaceId) {
+    const id = readId(libraryId, "libraryId");
+    const spaceId = readId(readingSpaceId, "readingSpaceId");
+    await this.getLibrary(userId, id);
+    const readingSpace = await this.libraryRepository.findAnyEntryForUser(userId, id, spaceId);
+    if (!readingSpace || !READING_SPACE_TYPES.includes(readingSpace.entryType)) {
+      throw new HttpError(404, "Reading space not found.");
+    }
+    const sections = await this.libraryRepository.listAllEntries(userId, id, spaceId);
+    const sectionOrder = new Map(READING_SECTION_TYPES.map((type, index) => [type, index]));
+    return sections
+      .filter((section) => sectionOrder.has(section.entryType))
+      .sort((left, right) => sectionOrder.get(left.entryType) - sectionOrder.get(right.entryType));
   }
 
   async createEntry(userId, libraryId, entryType, body) {
@@ -58,14 +214,13 @@ export class LibraryService {
     if (entry.parentEntryId !== null) {
       const parent = await this.libraryRepository.findAnyEntryForUser(userId, id, entry.parentEntryId);
       if (!parent) throw new HttpError(404, "Parent entry not found.");
-      const allowedTypes = parent.entryType === "BOOK"
-        ? BOOK_CHILD_TYPES
-        : parent.entryType === "COLLECTION"
-          ? COLLECTION_CHILD_TYPES
-          : null;
-      if (!allowedTypes) {
-        throw new HttpError(400, "Only books and custom collections can contain entries.");
-      }
+      const allowedTypes = SECTION_CHILD_TYPES.get(parent.entryType)
+        ?? (READING_SPACE_TYPES.includes(parent.entryType)
+          ? new Set(READING_SECTION_TYPES)
+          : parent.entryType === ENTRY_TYPES.COLLECTION
+            ? COLLECTION_CHILD_TYPES
+            : null);
+      if (!allowedTypes) throw new HttpError(400, "Entries can only be added to a reading-space section or custom collection.");
       if (!allowedTypes.has(entryType)) {
         throw new HttpError(400, `${parent.entryType.toLowerCase()} entries cannot contain ${entryType.toLowerCase()} entries.`);
       }
@@ -120,6 +275,134 @@ export class LibraryService {
       throw new HttpError(404, "Library entry not found.");
     }
   }
+
+  async listCommunityLibraries(userId, communityId) {
+    const libraries = await this.libraryRepository.listCommunityLibraries(
+      userId,
+      readId(communityId, "communityId"),
+    );
+    if (libraries === null) throw new HttpError(404, "Community not found or you are not a member.");
+    return libraries;
+  }
+
+  async createCommunityLibrary(userId, communityId, body) {
+    const name = readCommunityName(body?.name);
+    const description = readCommunityDescription(body?.description);
+    const library = await this.libraryRepository.createCommunityLibrary(
+      userId,
+      readId(communityId, "communityId"),
+      name,
+      description,
+    );
+    if (!library) throw new HttpError(404, "Community not found or you are not a member.");
+    return library;
+  }
+
+  async updateCommunityLibrary(userId, communityId, libraryId, body) {
+    const name = Object.hasOwn(body ?? {}, "name") ? readCommunityName(body.name) : null;
+    const description = Object.hasOwn(body ?? {}, "description")
+      ? readCommunityDescription(body.description)
+      : null;
+    if (!name && !description) throw new HttpError(400, "Provide a name or description.");
+    const library = await this.libraryRepository.updateCommunityLibrary(
+      userId,
+      readId(communityId, "communityId"),
+      readId(libraryId, "libraryId"),
+      name,
+      description,
+    );
+    if (!library) throw new HttpError(403, "Library not found or you do not have permission.");
+    return library;
+  }
+
+  async deleteCommunityLibrary(userId, communityId, libraryId) {
+    const deleted = await this.libraryRepository.deleteCommunityLibrary(
+      userId,
+      readId(communityId, "communityId"),
+      readId(libraryId, "libraryId"),
+    );
+    if (!deleted) throw new HttpError(403, "Library not found or you do not have permission.");
+  }
+
+  async listCommunityEntries(userId, communityId, libraryId) {
+    const entries = await this.libraryRepository.listCommunityEntries(
+      userId,
+      readId(communityId, "communityId"),
+      readId(libraryId, "libraryId"),
+    );
+    if (entries === null) throw new HttpError(404, "Shared library not found or community access denied.");
+    return entries;
+  }
+
+  async createCommunityEntry(userId, communityId, libraryId, body) {
+    const community = readId(communityId, "communityId");
+    const library = readId(libraryId, "libraryId");
+    const sharedLibrary = await this.libraryRepository.findCommunityLibrary(userId, community, library);
+    if (!sharedLibrary) throw new HttpError(404, "Shared library not found or community access denied.");
+
+    const model = findLibraryModel(sharedLibrary.modelKey);
+    const entryType = body?.entryType ?? model?.entryTypes[0] ?? ENTRY_TYPES.WORD;
+    if (typeof entryType !== "string" || !COMMUNITY_ENTRY_TYPES.has(entryType)) {
+      throw new HttpError(400, "entryType must be a supported library entry type.");
+    }
+    if (model && !model.entryTypes.includes(entryType)) {
+      throw new HttpError(400, "entryType does not belong to this community library model.");
+    }
+
+    const title = readCommunityName(body?.title, "Entry title", 255);
+    const content = readOptionalText(body?.content, "content", 10000);
+    const url = readUrl(body?.url);
+    const entry = await this.libraryRepository.createCommunityEntry(
+      userId,
+      community,
+      library,
+      entryType,
+      title,
+      content,
+      url,
+    );
+    if (!entry) throw new HttpError(404, "Shared library not found or community access denied.");
+    return entry;
+  }
+
+  async updateCommunityEntry(userId, communityId, libraryId, entryId, body) {
+    const title = Object.hasOwn(body ?? {}, "title") ? readCommunityName(body.title, "Entry title", 255) : null;
+    const content = Object.hasOwn(body ?? {}, "content") ? readOptionalText(body.content, "content", 10000) : null;
+    const url = Object.hasOwn(body ?? {}, "url") ? readUrl(body.url) : null;
+    if (!title && content === null && url === null) throw new HttpError(400, "Provide a title, content, or URL.");
+    const entry = await this.libraryRepository.updateCommunityEntry(
+      userId,
+      readId(communityId, "communityId"),
+      readId(libraryId, "libraryId"),
+      readId(entryId, "entryId"),
+      title,
+      content,
+      url,
+    );
+    if (!entry) throw new HttpError(403, "Entry not found or you do not have permission.");
+    return entry;
+  }
+
+  async deleteCommunityEntry(userId, communityId, libraryId, entryId) {
+    const deleted = await this.libraryRepository.deleteCommunityEntry(
+      userId,
+      readId(communityId, "communityId"),
+      readId(libraryId, "libraryId"),
+      readId(entryId, "entryId"),
+    );
+    if (!deleted) throw new HttpError(403, "Entry not found or you do not have permission.");
+  }
+
+  async validateParent(userId, libraryId, parentId) {
+    if (parentId === null) return;
+    const parent = await this.libraryRepository.findAnyEntryForUser(userId, libraryId, parentId);
+    if (!parent) throw new HttpError(404, "Parent entry not found.");
+    if (!READING_SPACE_TYPES.includes(parent.entryType)
+      && !READING_SECTION_TYPES.includes(parent.entryType)
+      && parent.entryType !== ENTRY_TYPES.COLLECTION) {
+      throw new HttpError(400, "Entries can only be listed inside a reading space, its section, or a custom collection.");
+    }
+  }
 }
 
 function readEntry(body, entryType) {
@@ -148,6 +431,13 @@ function readName(body, field, label, maxLength) {
     throw new HttpError(400, `${label} must be a non-empty string of at most ${maxLength} characters.`);
   }
   return value.trim();
+}
+
+function readBoolean(value, label) {
+  if (typeof value !== "boolean") {
+    throw new HttpError(400, `${label} must be a boolean.`);
+  }
+  return value;
 }
 
 function readOptionalText(value, label, maxLength) {
@@ -180,4 +470,19 @@ function readId(value, label) {
     throw new HttpError(400, `${label} must be a positive integer.`);
   }
   return id;
+}
+
+function readCommunityName(value, label = "Library name", maxLength = 100) {
+  if (typeof value !== "string" || !value.trim() || value.trim().length > maxLength) {
+    throw new HttpError(400, `${label} must be a non-empty string of at most ${maxLength} characters.`);
+  }
+  return value.trim();
+}
+
+function readCommunityDescription(value) {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "string" || value.length > 500) {
+    throw new HttpError(400, "Description must be a string of at most 500 characters.");
+  }
+  return value.trim();
 }

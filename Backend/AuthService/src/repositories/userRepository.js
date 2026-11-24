@@ -37,6 +37,8 @@ const INSERTED_USER_COLUMNS = `
   INSERTED.CreatedAt AS createdAt,
   INSERTED.UpdatedAt AS updatedAt`;
 
+const LIBRARY_MODEL_KEYS = ["words", "phrases", "reading-spaces", "poetry", "research"];
+
 export class UserRepository {
   async initialize() {
     await pool.connect();
@@ -128,11 +130,21 @@ export class UserRepository {
           VALUES (@username, @email, @passwordHash, @fullName, @bio, @avatarUrl);`);
 
       const createdUser = result.recordset[0];
-      await new sql.Request(transaction)
+      const libraryResult = await new sql.Request(transaction)
         .input("userId", sql.Int, createdUser.id)
         .query(`
           INSERT INTO dbo.Libraries (UserId, LibraryIndex, Name)
+          OUTPUT INSERTED.Id AS libraryId
           VALUES (@userId, 1, N'My Library');`);
+
+      const modelRequest = new sql.Request(transaction)
+        .input("libraryId", sql.Int, libraryResult.recordset[0].libraryId);
+      LIBRARY_MODEL_KEYS.forEach((modelKey, index) => {
+        modelRequest.input(`modelKey${index}`, sql.NVarChar(32), modelKey);
+      });
+      await modelRequest.query(`
+        INSERT INTO dbo.LibraryModels (LibraryId, ModelKey)
+        VALUES ${LIBRARY_MODEL_KEYS.map((_, index) => `(@libraryId, @modelKey${index})`).join(", ")};`);
 
       await transaction.commit();
       transactionStarted = false;

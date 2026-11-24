@@ -2,10 +2,12 @@ import express from "express";
 import { ENDPOINTS } from "./config/endpoints.js";
 import { createLibraryRoutes } from "./routes/libraryRoutes.js";
 import { HttpError } from "./utils/httpError.js";
+import { cors } from "./middleware/cors.js";
 
 export function createApp(authenticationService, libraryService) {
   const app = express();
 
+  app.use(cors);
   app.use(express.json({ limit: "10kb" }));
 
   app.get(ENDPOINTS.HEALTH, (_request, response) => {
@@ -21,7 +23,7 @@ export function createApp(authenticationService, libraryService) {
     next(new HttpError(404, "Endpoint not found."));
   });
 
-  app.use((error, _request, response, _next) => {
+  app.use((error, request, response, _next) => {
     if (error instanceof HttpError) {
       response.status(error.status).json({ error: error.message });
       return;
@@ -37,7 +39,10 @@ export function createApp(authenticationService, libraryService) {
       return;
     }
 
-    console.error("Library service request failed:", error);
+    console.error(
+      `Library service request failed [${request.method} ${request.originalUrl}] (${error.code ?? "unknown"}):`,
+      error,
+    );
     response.status(500).json({ error: "Internal server error." });
   });
 
